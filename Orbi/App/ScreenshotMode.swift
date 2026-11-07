@@ -98,6 +98,7 @@ enum ScreenshotMode {
             .environment(env.notifications)
             .environment(env.calendar)
             .environment(env.agentLog)
+            .environment(env.agentConnections)
             .modelContainer(env.modelContainer)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .padding(20)  // room for the shadow

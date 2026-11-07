@@ -16,6 +16,11 @@ targets:
     platform: macOS
     sources:
       - path: Orbi
+      # The hook and MCP scripts ship inside the app, so "Connect Claude Code" needs no repo.
+      - path: mcp/agent_hook.py
+        buildPhase: resources
+      - path: mcp/orbi_mcp.py
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.berke.Orbi
@@ -48,8 +53,11 @@ targets:
         com.apple.security.personal-information.calendars: true
         # status.json lives outside the protected group container so Claude (MCP) and
         # Touch Bar tools can read it without extra permissions. Only this one folder.
+        # Settings → AI agents → Connect adds Orbi's hooks to these agents' own settings files.
         com.apple.security.temporary-exception.files.home-relative-path.read-write:
           - /Library/Application Support/Orbi/
+          - /.claude/
+          - /.gemini/
   OrbiTests:
     type: bundle.unit-test
     platform: macOS

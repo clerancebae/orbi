@@ -4,6 +4,7 @@ import SwiftUI
 /// turns with the agent's last message and your reply. Click a row to read the full text.
 struct AgentsSection: View {
     @Environment(AgentLogStore.self) private var store
+    @Environment(AgentConnections.self) private var connections
     @State private var expanded: Set<String> = []
     @State private var showAll = false
 
@@ -37,6 +38,11 @@ struct AgentsSection: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if connections.status(.claude) != .connected {
+                    Button("Connect Claude Code") { connections.connect(.claude) }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                }
             } else if showAll {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 6) { rows(store.events) }

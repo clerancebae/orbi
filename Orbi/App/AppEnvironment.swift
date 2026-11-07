@@ -25,6 +25,7 @@ final class AppEnvironment {
     let notifyBubble: NotifyBubble
     let askBubble: AskBubble
     let agentLog: AgentLogStore
+    let agentConnections: AgentConnections
     /// nil in demo mode, so a throwaway in-memory session never overwrites the real status.json.
     let statusExporter: StatusExporter?
     private var systemObservers: [NSObjectProtocol] = []
@@ -77,6 +78,11 @@ final class AppEnvironment {
         notifyBubble = NotifyBubble(presenter: bubbles)
         agentLog = AgentLogStore(fileURL: demoBubble ? nil : SharedContainer.agentLogURL)
         askBubble = AskBubble(presenter: bubbles, log: agentLog)
+        agentConnections = AgentConnections()
+        // Only the installed copy repairs hook paths, so a debug build never redirects them.
+        if !demoBubble, Bundle.main.bundlePath.hasPrefix("/Applications/") {
+            agentConnections.repairIfOutdated()
+        }
         let readingStore = self.readingStore, readingNudgeBubble = self.readingNudgeBubble
         readingNudge = ReadingNudgeScheduler(
             config: { settings.readingNudgeConfig },

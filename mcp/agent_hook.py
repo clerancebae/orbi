@@ -15,7 +15,8 @@ Works with any agent whose hooks send JSON on stdin (session_id, cwd):
   ≥ ORBI_AGENT_MIN_SECONDS (default 60) also get a "finished" bubble that closes itself.
   With --reply (Claude, hook set to `asyncRewake`): the bubble shows the agent's last message with a
   reply field. A reply is written to stderr and the hook exits 2, which wakes Claude with it.
-- permission: an Allow / Deny / Terminal bubble. Allow or Deny is returned as the hook decision;
+- permission: an Allow / Deny / Terminal bubble (plus Always when Claude suggests a "don't ask again"
+  rule; it applies those rules via `updatedPermissions`). Allow or Deny is returned as the hook decision;
   Terminal, ✕ or a timeout returns nothing, so the normal terminal prompt applies.
 - prompt: marks the session as running (menu bar 🤖) and closes this session's open bubbles.
 - wait: a sticky "needs you" bubble until the agent continues. `idle_prompt` instead ends the running
@@ -179,12 +180,12 @@ def wait_answer(ask_id, timeout):
     return None
 
 
-def ask(s, kind, title, message, detail, timeout, seconds=None):
+def ask(s, kind, title, message, detail, timeout, seconds=None, always=None):
     """Shows an interactive bubble and waits for the answer (None if it timed out)."""
     ask_id = uuid.uuid4().hex[:16]
     pending = s.add_pending(kind, ask_id)
     open_url(build_url("ask", id=ask_id, kind=kind, title=title, message=message, detail=detail,
-                       **s.context(seconds)))
+                       always=always, **s.context(seconds)))
     answer = wait_answer(ask_id, timeout)
     try:
         os.remove(pending)
@@ -234,12 +235,34 @@ def on_wait(s, data, flags):
     return 0, {}
 
 
+def rule_label(suggestions):
+    """`Bash(npm test:*)` from Claude's first "don't ask again" suggestion, or None."""
+    for suggestion in suggestions if isinstance(suggestions, list) else []:
+        if not isinstance(suggestion, dict) or suggestion.get("behavior") != "allow":
+            continue
+        for rule in suggestion.get("rules") or []:
+            if isinstance(rule, dict) and rule.get("toolName"):
+                content = rule.get("ruleContent")
+                return "%s(%s)" % (rule["toolName"], content) if content else str(rule["toolName"])
+    return None
+
+
 def on_permission(s, data, flags):
     tool = str(data.get("tool_name") or "a tool")
     detail = describe_tool(tool, data.get("tool_input"))
-    answer = ask(s, "permission", "%s wants to use %s" % (s.name, tool), s.project, detail[:3000], ASK_TIMEOUT)
+    suggestions = data.get("permission_suggestions")
+    always = rule_label(suggestions)
+    answer = ask(s, "permission", "%s wants to use %s" % (s.name, tool), s.project, detail[:3000], ASK_TIMEOUT,
+                 always=always)
     action = (answer or {}).get("action")
-    if action == "allow":
+    if action == "always" and always:
+        # Same as picking "Yes, and don't ask again" in the terminal: Claude's own suggested rules.
+        return 0, {"hookSpecificOutput": {"hookEventName": "PermissionRequest",
+                                          "decision": {"behavior": "allow",
+                                                       "updatedPermissions": [x for x in suggestions
+                                                                              if isinstance(x, dict)
+                                                                              and x.get("behavior") == "allow"]}}}
+    if action in ("allow", "always"):
         return 0, {"hookSpecificOutput": {"hookEventName": "PermissionRequest",
                                           "decision": {"behavior": "allow"}}}
     if action == "deny":

@@ -26,6 +26,8 @@ Actions open URLs with `open -g` (nothing comes to the front), then wait up to 2
 - **Claude Desktop**: `mcpServers.orbi` in `~/Library/Application Support/Claude/claude_desktop_config.json`. Restart Claude Desktop to load it.
 
 ## Agent bubbles (`agent_hook.py`)
+The easy way: Orbi → **Settings → AI agents → Connect**. It writes the config below into `~/.claude/settings.json` / `~/.gemini/settings.json` using the copy of the script inside Orbi.app (`/Applications/Orbi.app/Contents/Resources/agent_hook.py`), and fixes the path by itself if the app is moved. The manual setup:
+
 One hook script for every agent CLI: `/usr/bin/python3 -I /path/to/Orbi/mcp/agent_hook.py <agent> <event>`.
 
 | Event | What you see | Claude Code | Gemini CLI |

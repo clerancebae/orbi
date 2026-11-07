@@ -42,8 +42,8 @@ Working with agents means a lot of waiting and a lot of window switching. You st
 ## Features
 
 ### For your AI agents
-- **Approve from the menu bar.** When Claude Code asks "may I run this?", a bubble shows the exact command with **Allow / Deny / Terminal**. No more switching windows to press Enter.
-- **Read and reply without the terminal.** When a long turn ends, the bubble shows what Claude said. Type your next instruction right there (or hit **Continue**) and Claude picks it up.
+- **Approve from the menu bar.** When Claude Code asks "may I run this?", a bubble shows the exact command with **Allow / Deny**, plus **Always** when Claude offers a "don't ask again" rule. No more switching windows to press Enter.
+- **Reply from the menu bar, in any terminal.** When a long turn ends, the bubble shows what Claude said. Type your next instruction right there (or hit **Continue**) and Claude picks it up. It works with Terminal, iTerm2, VS Code, Cursor and more, no tmux needed, because it uses Claude Code's own hooks.
 - **See who's working.** The menu bar shows 🤖 while an agent is mid-turn (🤖3 for three sessions) and 🔔🤖 when one is waiting for you.
 - **Jump back in one click.** Every bubble and Agents row has a ↗ button that brings the agent's terminal or IDE to the front (Terminal, iTerm2, VS Code, Cursor, Ghostty, …).
 - **Daily summary.** "Today: 2h 10m across 3 projects · 14 turns · 12 approved · 3 replies", at the top of the Agents list and in `get_status`.
@@ -73,33 +73,13 @@ cd orbi
 scripts/install.sh   # Release build → /Applications/Orbi.app → launch
 ```
 
-## Connect your AI assistant
+## Connect your AI agent
 
-The MCP server is a single Python file. It uses only the standard library and runs on the macOS system Python.
+Open Orbi's **Settings → AI agents** and click **Connect** next to Claude Code (or Gemini CLI). Orbi adds its hooks to the agent's `settings.json`; your own hooks and settings stay as they are, and a backup is kept as `settings.json.orbi-backup`. **Disconnect** removes only Orbi's entries. The scripts ship inside Orbi.app, so there's nothing else to download.
 
-```sh
-# Claude Code
-claude mcp add --scope user orbi -- /usr/bin/python3 -I /path/to/orbi/mcp/orbi_mcp.py
-```
+To let your agent see your day (MCP), use the **Copy Claude Code command** button in the same section, or **Copy JSON** for Claude Desktop, Cursor, VS Code and other MCP clients. Tools: `get_status`, `add_tasks`, `start_next_task`, `complete_active_task`, `log_water`, `undo_water`, `save_for_later`, `open_next_reading`, `notify`.
 
-Other clients (Claude Desktop, Gemini CLI, Cursor, VS Code, …):
-
-```json
-{ "mcpServers": { "orbi": { "command": "/usr/bin/python3", "args": ["-I", "/path/to/orbi/mcp/orbi_mcp.py"] } } }
-```
-
-Tools: `get_status`, `add_tasks`, `start_next_task`, `complete_active_task`, `log_water`, `undo_water`, `save_for_later`, `open_next_reading`, `notify`.
-
-To get the "agent finished" bubble, wire `mcp/agent_hook.py` into your agent's hooks. For Claude Code, add this to `~/.claude/settings.json`:
-
-```json
-"hooks": {
-  "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "/usr/bin/python3 -I /path/to/orbi/mcp/agent_hook.py claude prompt" }] }],
-  "Stop":             [{ "hooks": [{ "type": "command", "command": "/usr/bin/python3 -I /path/to/orbi/mcp/agent_hook.py claude stop" }] }]
-}
-```
-
-Setup for Gemini CLI and Codex is in [mcp/README.md](mcp/README.md).
+Manual setup and details for every hook event are in [mcp/README.md](mcp/README.md).
 
 ## URL scheme
 

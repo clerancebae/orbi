@@ -7,7 +7,7 @@ import SwiftUI
 /// Each question has its own bubble, so two sessions asking at once stack.
 @MainActor
 final class AskBubble {
-    enum Action: String { case allow, deny, terminal, reply, dismiss }
+    enum Action: String { case allow, always, deny, terminal, reply, dismiss }
 
     private let presenter: BubblePresenter
     private let agentLog: AgentLogStore
@@ -55,7 +55,7 @@ final class AskBubble {
 
     private func answer(_ id: String, action: Action, text: String?) {
         let outcome: AgentEvent.Outcome = switch action {
-        case .allow: .allowed
+        case .allow, .always: .allowed
         case .deny: .denied
         case .terminal: .terminal
         case .reply: .replied
@@ -107,11 +107,16 @@ private struct AskView: View {
                 .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
         }
         HStack(spacing: 8) {
-            Button("Terminal") { answer(.terminal, nil) }
+            Button { answer(.terminal, nil) } label: { Image(systemName: "terminal") }
                 .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
                 .help("Answer in the terminal instead")
             Spacer()
             Button("Deny") { answer(.deny, nil) }
+            if let rule = ask.alwaysRule {
+                Button("Always") { answer(.always, nil) }
+                    .help("Allow, and don't ask again for \(rule) in this project")
+            }
             Button("Allow") { answer(.allow, nil) }
                 .buttonStyle(.borderedProminent)
         }

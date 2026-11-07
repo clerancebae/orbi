@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
@@ -6,12 +7,49 @@ struct SettingsView: View {
     @Environment(CalendarService.self) private var calendar
     @Environment(NotificationService.self) private var notifications
     @Environment(ReminderScheduler.self) private var reminders
+    @Environment(AgentConnections.self) private var agents
+    @State private var copied: String?
 
     private static let intervals = [20, 30, 45, 60, 90, 120]
 
     var body: some View {
         @Bindable var settings = settings
         Form {
+            Section("AI agents") {
+                ForEach(agents.availableAgents) { kind in
+                    LabeledContent(kind.displayName) {
+                        HStack(spacing: 8) {
+                            Text(statusText(kind)).foregroundStyle(.secondary)
+                            switch agents.status(kind) {
+                            case .connected:
+                                Button("Disconnect") { agents.disconnect(kind) }
+                            case .outdated:
+                                Button("Update") { agents.connect(kind) }
+                            case .notConnected:
+                                Button("Connect") { agents.connect(kind) }.buttonStyle(.borderedProminent)
+                            }
+                        }
+                    }
+                }
+                Text("Adds Orbi's hooks to the agent's settings.json (your own hooks stay; a backup is kept): "
+                     + "permission and reply bubbles, 🤖 in the menu bar, the Agents list.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let error = agents.lastError {
+                    Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+                }
+                LabeledContent("Let Claude see your day (MCP)") {
+                    HStack(spacing: 8) {
+                        if let command = agents.claudeMCPCommand {
+                            Button(copied == "cli" ? "Copied ✓" : "Copy Claude Code command") { copy(command, as: "cli") }
+                        }
+                        if let json = agents.mcpJSON {
+                            Button(copied == "json" ? "Copied ✓" : "Copy JSON") { copy(json, as: "json") }
+                                .help("For Claude Desktop, Cursor and other MCP clients")
+                        }
+                    }
+                }
+            }
+
             Section("Water") {
                 Stepper("Daily goal: \(settings.waterGoal) glasses", value: $settings.waterGoal, in: 1...20)
                 Stepper("Glass size: \(settings.glassSizeMl) ml", value: $settings.glassSizeMl, in: 100...1000, step: 50)
@@ -68,6 +106,7 @@ struct SettingsView: View {
         .frame(width: 440)
         .fixedSize(horizontal: false, vertical: true)
         .task { await notifications.refreshAuthorization() }
+        .onAppear { agents.refresh() }
     }
 
     /// Bridges "minutes from midnight" settings to a DatePicker.
@@ -82,6 +121,20 @@ struct SettingsView: View {
                 settings[keyPath: keyPath] = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
             }
         )
+    }
+
+    private func statusText(_ kind: AgentKind) -> String {
+        switch agents.status(kind) {
+        case .connected: "Connected ✓"
+        case .outdated: "Needs update"
+        case .notConnected: "Not connected"
+        }
+    }
+
+    private func copy(_ text: String, as key: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copied = key
     }
 
     private var calendarStatus: String {

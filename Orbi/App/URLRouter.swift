@@ -69,6 +69,8 @@ struct AgentAsk: Equatable {
     /// The command / file for a permission, or the agent's last message for a reply.
     let detail: String?
     var context: AgentContext = .none
+    /// The rule Claude suggests for "don't ask again" (e.g. `Bash(npm test:*)`); shows an Always button.
+    var alwaysRule: String? = nil
 }
 
 /// Parses `orbi://` URLs into actions. Pure — no side effects — so it's fully unit tested.
@@ -199,7 +201,9 @@ enum URLRouter {
         return .success(.ask(AgentAsk(id: id, kind: kind, title: String(title.prefix(maxNotifyLength)),
                                       message: message.map { String($0.prefix(maxNotifyLength * 2)) },
                                       detail: detail.map { String($0.prefix(maxAskDetailLength)) },
-                                      context: parseContext(query))))
+                                      context: parseContext(query),
+                                      alwaysRule: query["always"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+                                          .nilIfEmpty.map { String($0.prefix(200)) })))
     }
 
     /// Optional agent fields shared by agent routes. Invalid values are dropped, not errors,

@@ -13,6 +13,8 @@
 	<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
 	<array>
 		<string>/Library/Application Support/Orbi/</string>
+		<string>/.claude/</string>
+		<string>/.gemini/</string>
 	</array>
 </dict>
 </plist>

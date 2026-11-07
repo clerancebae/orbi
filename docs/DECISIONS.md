@@ -148,3 +148,13 @@ Bubbles disappear, so what Claude said and what you approved was lost. `AgentLog
 
 ### Task clock pauses during sleep and screen lock (review fix)
 An active task left running overnight came back with ~14 h elapsed, since elapsed time is `now − startedAt`. On `willSleep` and `com.apple.screenIsLocked`, the elapsed time is banked into `spentSeconds` and `startedAt` cleared (the task stays active); on wake / unlock, `startedAt` restarts from now.
+
+### One-click connect (Settings → AI agents)
+Competitors (Vibe Notch, Claude Status Bar, VibeBar) all install their hooks themselves; ours needed hand-edited JSON, our biggest onboarding gap. Now `agent_hook.py` and `orbi_mcp.py` ship as app resources, and `AgentConnections` edits `~/.claude/settings.json` / `~/.gemini/settings.json`:
+- Sandbox access via two more home-relative temporary exceptions (`/.claude/`, `/.gemini/`). Fine outside the App Store; an App Store build would need a different approach (e.g. a "copy setup command" flow).
+- `AgentHookConfig` (pure, tested) adds Orbi's entries next to the user's own and removes only entries whose command contains `agent_hook.py`. It never overwrites a file it can't parse; the first write keeps `settings.json.orbi-backup`. Output is pretty-printed with sorted keys, so the user's key order isn't kept, but values are.
+- At launch, the copy in `/Applications` repairs hook paths that point at another copy of the script (app moved or replaced, or the old repo path). It never connects an agent that wasn't connected, and debug builds never repair, so they can't redirect hooks to a build folder.
+- MCP stays copy-to-clipboard (`claude mcp add …` / JSON): `~/.claude.json` is large and rewritten by Claude Code all the time, and Claude Desktop rewrites its config itself, so writing them from Orbi would race.
+
+### "Always" in the permission bubble
+`PermissionRequest` input carries `permission_suggestions`, the rules behind the terminal's "Yes, and don't ask again". The hook shows **Always** when there is an allow suggestion (labelled like `Bash(npm test:*)`), and on click returns `allow` with those suggestions as `updatedPermissions`, the same as choosing it in the terminal.

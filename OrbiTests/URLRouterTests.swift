@@ -115,6 +115,9 @@ struct NotifyRouteTests {
         #expect(parse("orbi://ask?id=a&kind=other&title=t") == .failure(.invalidParameter("kind")))
         #expect(parse("orbi://ask?id=a&kind=reply") == .failure(.missingParameter("title")))
         #expect(parse("orbi://ask/cancel?id=ab-12") == .success(.askCancel(id: "ab-12")))
+        #expect(parse("orbi://ask?id=p1&kind=permission&title=t&always=Bash(npm%20test:*)")
+                == .success(.ask(AgentAsk(id: "p1", kind: .permission, title: "t", message: nil, detail: nil,
+                                          alwaysRule: "Bash(npm test:*)"))))
         #expect(parse("orbi://ask/cancel") == .failure(.invalidParameter("id")))
         #expect(parse("orbi://agent/log?title=Claude%20finished&subtitle=Orbi%20%C2%B7%2045%20s&detail=Done.")
                 == .success(.agentLog(title: "Claude finished", subtitle: "Orbi · 45 s", detail: "Done.")))

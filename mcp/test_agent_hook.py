@@ -165,6 +165,24 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.permission("terminal"), {})
         self.assertEqual(self.pending(), [])
 
+    def test_permission_always_applies_claudes_suggestion(self):
+        suggestion = {"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "npm test:*"}],
+                      "behavior": "allow", "destination": "localSettings"}
+        p = self.start_hook("claude", "permission", dict(S1, tool_name="Bash", tool_input={"command": "npm test"},
+                                                         permission_suggestions=[suggestion]))
+        q = self.wait_for_ask(p)
+        self.assertEqual(q["always"], "Bash(npm test:*)")
+        self.answer(q["id"], "always")
+        out = json.loads(self.finish(p)[0])
+        self.assertEqual(out["hookSpecificOutput"]["decision"],
+                         {"behavior": "allow", "updatedPermissions": [suggestion]})
+        # Without suggestions there's no Always button (no `always` param).
+        p = self.start_hook("claude", "permission", dict(S1, tool_name="Bash", tool_input={"command": "ls"}))
+        q = self.wait_for_ask(p)
+        self.assertNotIn("always", q)
+        self.answer(q["id"], "allow")
+        self.assertEqual(json.loads(self.finish(p)[0])["hookSpecificOutput"]["decision"], {"behavior": "allow"})
+
     def test_permission_answered_in_terminal(self):
         p = self.start_hook("claude", "permission", dict(S1, tool_name="Edit", tool_input={"file_path": "/a.swift"}))
         q = self.wait_for_ask(p)
