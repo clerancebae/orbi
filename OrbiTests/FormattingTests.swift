@@ -54,18 +54,12 @@ struct MenuBarTextTests {
 struct MenuBarAgentsTests {
     @Test func orbitState() {
         typealias S = MenuBarIconState
-        #expect(S.current(agentsRunning: 0, agentsWaiting: 0, remainingSeconds: nil, estimateSeconds: nil) == .idle)
-        #expect(S.current(agentsRunning: 2, agentsWaiting: 0, remainingSeconds: nil, estimateSeconds: nil) == .working)
-        // A task with an estimate shows progress in 5% steps (95% → 19 of 20), even while agents work.
-        #expect(S.current(agentsRunning: 1, agentsWaiting: 0, remainingSeconds: 90, estimateSeconds: 1800) == .progress(19))
-        #expect(S.current(agentsRunning: 0, agentsWaiting: 0, remainingSeconds: 1800, estimateSeconds: 1800) == .progress(0))
-        #expect(S.current(agentsRunning: 0, agentsWaiting: 0, remainingSeconds: 0, estimateSeconds: 1800) == .progress(20))
-        #expect(S.current(agentsRunning: 0, agentsWaiting: 0, remainingSeconds: -60, estimateSeconds: 1800) == .over)
-        // Asking wins over everything; an open reply bubble counts even after the turn ended.
-        #expect(S.current(agentsRunning: 0, agentsWaiting: 1, remainingSeconds: -60, estimateSeconds: 1800) == .asking)
-        // No estimate → elapsed only, so no progress: falls back to agent / idle.
-        #expect(S.current(agentsRunning: 0, agentsWaiting: 0, remainingSeconds: nil, estimateSeconds: nil) == .idle)
-        #expect(S.asking.isColored && S.over.isColored && !S.progress(5).isColored && !S.working.isColored)
+        #expect(S.current(agentsRunning: 0, agentsWaiting: 0) == .idle)
+        #expect(S.current(agentsRunning: 2, agentsWaiting: 0) == .working)
+        // Your turn wins: a question, or a finished turn you haven't seen, even while others work.
+        #expect(S.current(agentsRunning: 1, agentsWaiting: 1) == .asking)
+        #expect(S.current(agentsRunning: 0, agentsWaiting: 3) == .asking)
+        #expect(S.asking.isColored && !S.working.isColored && !S.idle.isColored)
     }
 
     @Test func daySummary() {

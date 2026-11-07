@@ -172,3 +172,9 @@ The emoji label (🤖 🔔 🎯 ⏰ next to text) was replaced by an orbit icon 
 - The label image needs `.renderingMode(.original)` for the coloured states: without it the menu bar label rendered it as a template, and blue / orange showed up monochrome (found in the real menu bar). Debug builds have `-OrbiMenuBarDemo`, which cycles every state every 4 s to check them in the real menu bar.
 - Coloured states can't be template images, so the planet is drawn in the menu bar's text colour, read from Orbi's own `NSStatusBarWindow.effectiveAppearance` (KVO). Images are cached per state, and progress moves in 5% steps, so the icon redraws at most about once a minute.
 - The text next to the icon is now plain: `API docs · 23m` / `+4m`, the next event `Standup 14:00`, and water `💧3/4` (hideable).
+
+### Orbit simplified: agents only, "your turn" is blue (owner feedback)
+Two problems showed up in real use: a finished turn didn't change the colour (it only went from solid to faint, easy to miss), and the solid "working" orbit looked like "100% done". The task-progress fill also confused things, because one ring meant both "Claude" and "your own task timer".
+- The orbit now shows only agents: **idle** faint, **working** dashed (shape, not colour), **your turn** blue.
+- "Your turn" = an open question or reply bubble, **or a finished turn you haven't seen** (`AgentLogStore.finishedUnseen`). It's cleared by that session's next prompt, by answering its reply bubble, or by opening the panel. An idle / interrupted stop doesn't count.
+- Task progress and "over time" (orange) were removed from the icon; the task timer stays in the text (`API docs · 23m` / `+4m`). The debug `-OrbiMenuBarDemo` cycles the three states.

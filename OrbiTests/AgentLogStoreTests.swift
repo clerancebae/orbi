@@ -82,4 +82,25 @@ struct AgentLogStoreTests {
         store.finishTurn(AgentContext(project: "Orbi", seconds: 90))
         #expect(AgentLogStore(fileURL: url).today.turns == 1)  // saved in the new format
     }
+
+    @Test func finishedTurnIsYourTurnUntilSeen() {
+        let store = AgentLogStore(fileURL: nil)
+        store.start(AgentContext(session: "a"))
+        store.start(AgentContext(session: "b"))
+        #expect(store.waitingForYou == 0)
+        store.finishTurn(AgentContext(session: "a", seconds: 30))
+        store.finishTurn(AgentContext(session: "b", seconds: 30))
+        #expect(store.waitingForYou == 2)
+        store.start(AgentContext(session: "a"))  // you typed the next prompt in session a
+        #expect(store.finishedUnseen == ["b"])
+        store.markSeen(session: "b")             // answered b's reply bubble
+        #expect(store.waitingForYou == 0)
+        store.finishTurn(AgentContext(session: "a"))
+        store.askOpened("q1")
+        #expect(store.waitingForYou == 2)
+        store.markSeen()                          // opened the panel
+        #expect(store.waitingForYou == 1)         // the open question still waits
+        store.stop(session: "a")                  // idle/interrupted doesn't count as "your turn"
+        #expect(store.finishedUnseen.isEmpty)
+    }
 }

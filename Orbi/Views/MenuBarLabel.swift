@@ -4,7 +4,7 @@ import SwiftUI
 enum MenuBarText {
     static let titleLimit = 18
 
-    /// "API docs · 23m", "API docs · +4m" (over the estimate; the orbit turns orange), or
+    /// "API docs · 23m", "API docs · +4m" (over the estimate), or
     /// "API docs · 12m" (elapsed, no estimate). The orbit icon carries the state, so no emoji.
     static func activeTask(title: String, remainingSeconds: Int?, elapsedSeconds: Int) -> String {
         let short = title.truncated(to: titleLimit)
@@ -32,7 +32,7 @@ enum MenuBarText {
     }
 }
 
-/// The always-visible menu bar item: the orbit icon (its colour and fill are the status) and a
+/// The always-visible menu bar item: the orbit icon (your agents' status) and a
 /// short text. Re-renders only when observed state changes (task ticks ≤ once/min while
 /// active, agents start/stop/ask, water logged, reminder due, next event changes).
 struct MenuBarLabel: View {
@@ -62,11 +62,7 @@ struct MenuBarLabel: View {
         #if DEBUG
         if let demo = MenuBarDemo.shared.state { return demo }
         #endif
-        let active = tasks.activeTask
-        return MenuBarIconState.current(
-            agentsRunning: agents.running.count, agentsWaiting: agents.openAsks.count,
-            remainingSeconds: active.flatMap { tasks.remainingSeconds($0) },
-            estimateSeconds: active?.estimatedMinutes.map { $0 * 60 })
+        return MenuBarIconState.current(agentsRunning: agents.running.count, agentsWaiting: agents.waitingForYou)
     }
 
     private var displayText: String {

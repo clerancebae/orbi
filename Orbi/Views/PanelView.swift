@@ -45,6 +45,7 @@ struct PanelView: View {
             calendar.refresh()
             loginItems.refresh()
             agentLog.pruneStale()
+            agentLog.markSeen()  // you looked: finished turns are no longer "your turn"
         }
         .task { await notifications.refreshAuthorization() }
     }

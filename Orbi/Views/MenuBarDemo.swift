@@ -17,7 +17,7 @@ final class MenuBarDemo {
     @ObservationIgnored private var index = 0
 
     private static let sequence: [MenuBarIconState] = [
-        .idle, .working, .progress(5), .progress(10), .progress(15), .progress(19), .asking, .over,
+        .idle, .working, .asking,
     ]
 
     func start() {
@@ -37,9 +37,7 @@ extension MenuBarIconState {
         switch self {
         case .idle: "idle"
         case .working: "agent working"
-        case .progress(let step): "task \(step * 100 / MenuBarIconState.steps)%"
-        case .asking: "agent asks you (blue)"
-        case .over: "over time (orange)"
+        case .asking: "your turn: finished / asks you (blue)"
         }
     }
 }

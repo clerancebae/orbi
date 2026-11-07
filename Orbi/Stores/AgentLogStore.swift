@@ -66,6 +66,12 @@ final class AgentLogStore {
     private(set) var running: [RunningAgent] = []
     /// Ids of ask bubbles waiting for your answer.
     private(set) var openAsks: Set<String> = []
+    /// Sessions whose turn ended and you haven't looked yet: it's your turn. Cleared by the
+    /// session's next prompt, by answering its reply bubble, or by opening the panel.
+    private(set) var finishedUnseen: Set<String> = []
+
+    /// Agents waiting on you: open questions plus finished turns you haven't seen.
+    var waitingForYou: Int { openAsks.count + finishedUnseen.count }
 
     @ObservationIgnored private let fileURL: URL?
     @ObservationIgnored private let now: () -> Date
@@ -119,6 +125,7 @@ final class AgentLogStore {
 
     func start(_ context: AgentContext, at date: Date? = nil) {
         guard let session = context.session else { return }
+        finishedUnseen.remove(session)
         pruneStale()
         running.removeAll { $0.session == session }
         running.append(RunningAgent(session: session, agent: context.agent ?? "Agent", project: context.project,
@@ -131,13 +138,21 @@ final class AgentLogStore {
 
     /// A turn ended: stop the session and count it for today.
     func finishTurn(_ context: AgentContext) {
-        if let session = context.session { stop(session: session) }
+        if let session = context.session {
+            stop(session: session)
+            finishedUnseen.insert(session)
+        }
         updateToday { stats in
             stats.turns += 1
             stats.seconds += context.seconds ?? 0
             if let project = context.project, !stats.projects.contains(project) { stats.projects.append(project) }
         }
         save()
+    }
+
+    /// You've seen it: from the panel (all sessions) or a reply bubble (one session).
+    func markSeen(session: String? = nil) {
+        if let session { finishedUnseen.remove(session) } else if !finishedUnseen.isEmpty { finishedUnseen.removeAll() }
     }
 
     func pruneStale() {

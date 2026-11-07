@@ -1,37 +1,24 @@
 import AppKit
 import Observation
 
-/// What the menu bar orbit shows. The orbit alone carries the state; colours are chosen to be
-/// colour-blind safe: neutral (luminance only) for normal states, blue and orange (a pair
-/// every common colour-vision deficiency can tell apart) for the two "look at me" states.
-/// No green or red.
+/// What the menu bar orbit shows: only your AI agents. Your own task timer stays in the text
+/// next to it ("API docs · 23m" / "+4m"), so one shape never means two things.
+/// Colour-blind safe: idle and working differ by shape (faint vs dashed), and the one colour
+/// is blue.
 enum MenuBarIconState: Hashable {
-    /// Nothing going on: faint orbit.
+    /// No agent busy: faint orbit.
     case idle
-    /// An agent is mid-turn: solid orbit.
+    /// An agent is mid-turn: dashed orbit ("in motion", not "100% done").
     case working
-    /// Active task with an estimate: the orbit fills in steps of 5% (0...20).
-    case progress(Int)
-    /// An agent waits for your answer: blue. Wins over everything else.
+    /// Your turn: an agent asks you something, or finished and you haven't looked yet. Blue.
     case asking
-    /// The active task ran over its estimate: orange.
-    case over
 
-    static let steps = 20
-
-    /// Priority: asking > over > progress > working > idle.
-    static func current(agentsRunning: Int, agentsWaiting: Int,
-                        remainingSeconds: Int?, estimateSeconds: Int?) -> MenuBarIconState {
+    static func current(agentsRunning: Int, agentsWaiting: Int) -> MenuBarIconState {
         if agentsWaiting > 0 { return .asking }
-        if let remaining = remainingSeconds, remaining < 0 { return .over }
-        if let remaining = remainingSeconds, let estimate = estimateSeconds, estimate > 0 {
-            let done = Double(estimate - remaining) / Double(estimate)
-            return .progress(min(steps, max(0, Int((done * Double(steps)).rounded(.down)))))
-        }
         return agentsRunning > 0 ? .working : .idle
     }
 
-    var isColored: Bool { self == .asking || self == .over }
+    var isColored: Bool { self == .asking }
 }
 
 /// Draws the orbit icon (18 × 18 pt, like the app icon: a planet inside a tilted orbit).
@@ -41,7 +28,6 @@ enum MenuBarIconState: Hashable {
 enum MenuBarIcon {
     static let size = NSSize(width: 18, height: 18)
     static let blue = NSColor(srgbRed: 0.04, green: 0.52, blue: 1, alpha: 1)
-    static let orange = NSColor(srgbRed: 1, green: 0.58, blue: 0, alpha: 1)
 
     private struct Key: Hashable { let state: MenuBarIconState; let dark: Bool }
     private static var cache: [Key: NSImage] = [:]
@@ -85,17 +71,11 @@ enum MenuBarIcon {
         case .idle:
             stroke(ink.withAlphaComponent(0.45), width, full)
         case .working:
+            ctx.setLineDash(phase: 0, lengths: [2.6, 2.0])
             stroke(ink, width, full)
-        case .progress(let step):
-            stroke(ink.withAlphaComponent(0.3), width, full)
-            if step > 0 {
-                let end = CGFloat.pi / 2 + 2 * .pi * CGFloat(step) / CGFloat(MenuBarIconState.steps)
-                stroke(ink, width + 0.2, orbit(from: .pi / 2, to: end))
-            }
+            ctx.setLineDash(phase: 0, lengths: [])
         case .asking:
             stroke(blue, width + 0.2, full)
-        case .over:
-            stroke(orange, width + 0.2, full)
         }
         ctx.setFillColor(ink.cgColor)
         ctx.fillEllipse(in: CGRect(x: c.x - 3.3, y: c.y - 3.3, width: 6.6, height: 6.6))

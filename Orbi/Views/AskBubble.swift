@@ -42,6 +42,7 @@ final class AskBubble {
         presenter.show(key: key, sound: sound, interactive: true) { [weak self] close in
             AskView(ask: ask) { action, text in
                 self?.answer(ask.id, action: action, text: text)
+                if ask.kind == .reply, let session = ask.context.session { self?.agentLog.markSeen(session: session) }
                 close()
             }
         }
