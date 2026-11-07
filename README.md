@@ -5,8 +5,13 @@
 <h1 align="center">Orbi</h1>
 
 <p align="center">
-  <b>The menu bar companion for people who work with AI agents.</b><br>
-  Hand a long task to Claude Code, Codex or Gemini, walk away, and Orbi pings you when it's done.
+  <b>The menu bar companion for people who work with AI agents.</b>
+</p>
+
+<p align="center">
+  Hand Claude Code a task and switch away: when it needs permission or finishes, a bubble drops from the menu bar
+  so you can approve or send the next instruction without going back to the terminal.
+  A 🤖 shows who's working, and the panel keeps a log of everything your agent did today.
 </p>
 
 <p align="center">
