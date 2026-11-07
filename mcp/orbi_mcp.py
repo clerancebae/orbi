@@ -183,6 +183,24 @@ def summarize(s):
         for r in read[:10]:
             lines.append("  - %s (%s)" % (r.get("title", ""), age_text(r.get("finishedAt"))))
 
+    agents = s.get("agents") or []
+    if agents:
+        lines.append("")
+        lines.append("Recent AI agent activity (newest first):")
+        for a in agents:
+            parts = [a.get("title", "")]
+            if a.get("subtitle"):
+                parts.append(a["subtitle"])
+            if a.get("outcome"):
+                parts.append(a["outcome"])
+            parts.append(age_text(a.get("date")) or "")
+            line = "  - " + " · ".join(p for p in parts if p)
+            if a.get("detail"):
+                line += "\n      " + a["detail"].replace("\n", " ")[:200]
+            if a.get("reply"):
+                line += "\n      user replied: " + a["reply"]
+            lines.append(line)
+
     lines.append("")
     lines.append("(Orbi status updated %s)" % (age_text(s.get("updatedAt")) or "unknown"))
     return "\n".join(lines)

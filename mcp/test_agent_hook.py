@@ -66,8 +66,18 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.run_hook("claude", "prompt", S1), (0, "{}", []))
         self.assertEqual(self.run_hook("claude", "stop", S1, "--reply"), (0, "{}", []))
         self.run_hook("gemini", "prompt", S1)
-        code, out, urls = self.run_hook("gemini", "stop", S1, ORBI_AGENT_MIN_SECONDS="0")
-        self.assertEqual(urls, ["orbi://notify?title=Gemini%20finished%20%E2%9C%93&message=Orbi%20%C2%B7%201%20min"])
+        code, out, urls = self.run_hook("gemini", "stop", dict(S1, prompt_response="All done."),
+                                        ORBI_AGENT_MIN_SECONDS="0")
+        self.assertEqual(urls[0], "orbi://notify?title=Gemini%20finished%20%E2%9C%93&message=Orbi%20%C2%B7%201%20s")
+        self.assertEqual(urls[1], "orbi://agent/log?title=Gemini%20finished%20%E2%9C%93"
+                                  "&subtitle=Orbi%20%C2%B7%201%20s&detail=All%20done.")
+
+    def test_short_turn_with_message_is_logged_silently(self):
+        self.run_hook("claude", "prompt", S1)
+        code, out, urls = self.run_hook("claude", "stop", dict(S1, last_assistant_message="Fixed it."), "--reply")
+        self.assertEqual(len(urls), 1)
+        self.assertTrue(urls[0].startswith("orbi://agent/log?title=Claude%20finished"))
+        self.assertIn("detail=Fixed%20it.", urls[0])
 
     def test_reply_wakes_claude(self):
         self.run_hook("claude", "prompt", S1)

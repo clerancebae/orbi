@@ -18,7 +18,7 @@
 
 ## Why
 
-Working with agents means a lot of waiting. You start a run, switch to something else, and either keep checking the terminal or forget about it for 20 minutes. Orbi sits in the menu bar and fixes both:
+Working with agents means a lot of waiting and a lot of window switching. You start a run, switch to something else, and either keep checking the terminal or forget about it for 20 minutes. Orbi sits in the menu bar and fixes both:
 
 1. **It tells you when the agent is done**, so you can stop watching the terminal.
 2. **It fills the wait with what matters**: your next task, a glass of water, that article you saved.
@@ -29,6 +29,7 @@ Working with agents means a lot of waiting. You start a run, switch to something
 ### For your AI agents
 - **Approve from the menu bar.** When Claude Code asks "may I run this?", a bubble shows the exact command with **Allow / Deny / Terminal**. No more switching windows to press Enter.
 - **Read and reply without the terminal.** When a long turn ends, the bubble shows what Claude said. Type your next instruction right there (or hit **Continue**) and Claude picks it up.
+- **See what your agent did.** The **Agents** list at the top of Orbi's panel keeps every finished turn (with Claude's last message), every permission request (with your answer) and your replies. Click a row to read it in full, or ask your agent "what did you do today?" over MCP.
 - **"Agent finished" bubble.** A small bubble under the menu bar icon when Claude Code, Gemini CLI or Codex finishes a turn longer than a minute: *"Claude finished ✓ · my-project · 7 min"*. Short replies stay quiet.
 - **MCP server.** Claude (Desktop and Code), Gemini CLI, Cursor, VS Code and any other MCP client can read your day and act on it: "plan my day: API docs 45m, review PR 20m", "start the next task", "save this link for later".
 - **Ping on request.** In chats without hooks (Claude Desktop), say "notify me on Orbi when you're done" and the agent calls the `notify` tool.

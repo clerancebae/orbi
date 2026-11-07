@@ -10,15 +10,19 @@ final class AskBubble {
     enum Action: String { case allow, deny, terminal, reply, dismiss }
 
     private let presenter: BubblePresenter
+    private let agentLog: AgentLogStore
     private let log = Logger(subsystem: "com.berke.Orbi", category: "AskBubble")
 
-    init(presenter: BubblePresenter) {
+    init(presenter: BubblePresenter, log agentLog: AgentLogStore) {
         self.presenter = presenter
+        self.agentLog = agentLog
     }
 
     private static func key(_ id: String) -> String { "ask-" + id }
 
     func show(_ ask: AgentAsk) {
+        agentLog.add(AgentEvent(id: ask.id, date: .now, kind: ask.kind == .permission ? .permission : .finished,
+                                title: ask.title, subtitle: ask.message, detail: ask.detail))
         let key = Self.key(ask.id)
         let sound = ask.kind == .permission ? "Ping" : "Glass"
         presenter.show(key: key, sound: sound, interactive: true) { [weak self] close in
@@ -31,10 +35,19 @@ final class AskBubble {
 
     /// Answered elsewhere: just close.
     func cancel(id: String) {
+        agentLog.setOutcome(id: id, .elsewhere)
         presenter.close(Self.key(id))
     }
 
     private func answer(_ id: String, action: Action, text: String?) {
+        let outcome: AgentEvent.Outcome = switch action {
+        case .allow: .allowed
+        case .deny: .denied
+        case .terminal: .terminal
+        case .reply: .replied
+        case .dismiss: .dismissed
+        }
+        agentLog.setOutcome(id: id, outcome, reply: action == .reply ? text : nil)
         var payload: [String: String] = ["id": id, "action": action.rawValue]
         if let text { payload["text"] = text }
         do {

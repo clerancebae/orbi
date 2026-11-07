@@ -13,6 +13,8 @@ struct PanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            AgentsSection()
+            Divider()
             TodaySection()
             Divider()
             WaterSection()

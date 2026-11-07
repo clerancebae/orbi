@@ -17,6 +17,7 @@ struct OrbiApp: App {
                 .environment(env.reminders)
                 .environment(env.notifications)
                 .environment(env.calendar)
+                .environment(env.agentLog)
                 .modelContainer(env.modelContainer)
         } label: {
             MenuBarLabel(tasks: env.taskStore, water: env.waterStore, settings: env.settings,

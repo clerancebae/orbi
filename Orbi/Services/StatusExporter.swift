@@ -23,6 +23,17 @@ struct StatusSnapshot: Codable, Equatable, Sendable {
         var snoozed: Bool
     }
 
+    struct Agent: Codable, Equatable, Sendable {
+        var date: Date
+        var kind: String
+        var title: String
+        var subtitle: String?
+        /// First 300 characters.
+        var detail: String?
+        var outcome: String?
+        var reply: String?
+    }
+
     struct Finished: Codable, Equatable, Sendable {
         var title: String
         var url: String
@@ -44,6 +55,8 @@ struct StatusSnapshot: Codable, Equatable, Sendable {
     var reading: [Reading]
     /// Finished read-later items, most recent first (last 30).
     var read: [Finished]
+    /// Recent agent activity (permissions, finished turns), newest first (last 10).
+    var agents: [Agent] = []
     var updatedAt: Date
 
     /// Equal ignoring `updatedAt`, so an unchanged state is not rewritten.

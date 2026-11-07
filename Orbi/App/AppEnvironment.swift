@@ -24,6 +24,7 @@ final class AppEnvironment {
     let readingNudge: ReadingNudgeScheduler
     let notifyBubble: NotifyBubble
     let askBubble: AskBubble
+    let agentLog: AgentLogStore
     /// nil in demo mode, so a throwaway in-memory session never overwrites the real status.json.
     let statusExporter: StatusExporter?
     private var systemObservers: [NSObjectProtocol] = []
@@ -74,7 +75,8 @@ final class AppEnvironment {
         readingStore = ReadingStore(context: modelContainer.mainContext)
         readingNudgeBubble = ReadingNudgeBubble(presenter: bubbles, store: readingStore)
         notifyBubble = NotifyBubble(presenter: bubbles)
-        askBubble = AskBubble(presenter: bubbles)
+        agentLog = AgentLogStore(fileURL: demoBubble ? nil : SharedContainer.agentLogURL)
+        askBubble = AskBubble(presenter: bubbles, log: agentLog)
         let readingStore = self.readingStore, readingNudgeBubble = self.readingNudgeBubble
         readingNudge = ReadingNudgeScheduler(
             config: { settings.readingNudgeConfig },
@@ -199,6 +201,9 @@ final class AppEnvironment {
             askBubble.show(ask)
         case let .askCancel(id):
             askBubble.cancel(id: id)
+        case let .agentLog(title, subtitle, detail):
+            agentLog.add(AgentEvent(id: UUID().uuidString, date: .now, kind: .finished, title: title,
+                                    subtitle: subtitle, detail: detail))
         case .capture:
             Self.urlLog.info("orbi://capture arrives with the quick-capture panel (Phase 4)")
         }
@@ -242,6 +247,11 @@ final class AppEnvironment {
             },
             read: readingStore.finished.prefix(30).compactMap { item in
                 item.finishedAt.map { .init(title: item.title, url: item.url.absoluteString, finishedAt: $0) }
+            },
+            agents: agentLog.events.prefix(10).map {
+                .init(date: $0.date, kind: $0.kind.rawValue, title: $0.title, subtitle: $0.subtitle,
+                      detail: $0.detail.map { String($0.prefix(300)) }, outcome: $0.outcome?.rawValue,
+                      reply: $0.reply)
             },
             updatedAt: now
         )

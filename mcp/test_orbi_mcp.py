@@ -21,6 +21,8 @@ STATUS = {
     "reading": [{"title": "Swift 6", "url": "https://swift.org", "savedAt": "2026-11-01T10:00:00Z",
                  "opened": True, "snoozed": False}],
     "read": [{"title": "Old post", "url": "https://example.com", "finishedAt": "2026-11-06T10:00:00Z"}],
+    "agents": [{"date": "2026-11-07T09:58:00Z", "kind": "finished", "title": "Claude finished ✓",
+                "subtitle": "Orbi · 7 min", "detail": "Tests pass.\nPush?", "outcome": "replied", "reply": "push it"}],
     "updatedAt": "2026-11-07T10:00:00Z",
 }
 
@@ -78,6 +80,10 @@ class Tests(unittest.TestCase):
         self.assertIn("Swift 6 <https://swift.org>", text)
         self.assertIn("opened, not finished", text)
         self.assertIn("Old post", text)
+        self.assertIn("Recent AI agent activity", text)
+        self.assertIn("Claude finished ✓ · Orbi · 7 min · replied", text)
+        self.assertIn("Tests pass. Push?", text)
+        self.assertIn("user replied: push it", text)
 
     def test_add_tasks_encodes_urls(self):
         r = session([INIT, call(2, "add_tasks", {"tasks": [

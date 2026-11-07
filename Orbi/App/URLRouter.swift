@@ -39,6 +39,8 @@ enum OrbiAction: Equatable, Sendable {
     case ask(AgentAsk)
     /// The question was answered elsewhere (e.g. in the terminal): close it without answering.
     case askCancel(id: String)
+    /// Silent entry in the Agents list (a finished turn that showed no bubble).
+    case agentLog(title: String, subtitle: String?, detail: String?)
 }
 
 struct AgentAsk: Equatable {
@@ -84,6 +86,16 @@ enum URLRouter {
         case "notify": return parseNotify(query)
         case "notify/dismiss": return .success(.notifyDismiss)
         case "ask": return parseAsk(query)
+        case "agent/log":
+            guard let title = query["title"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty else {
+                return .failure(.missingParameter("title"))
+            }
+            return .success(.agentLog(
+                title: String(title.prefix(maxNotifyLength)),
+                subtitle: query["subtitle"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    .map { String($0.prefix(maxNotifyLength * 2)) },
+                detail: query["detail"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    .map { String($0.prefix(maxAskDetailLength)) }))
         case "ask/cancel":
             guard let id = query["id"], isValidAskID(id) else { return .failure(.invalidParameter("id")) }
             return .success(.askCancel(id: id))

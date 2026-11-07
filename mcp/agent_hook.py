@@ -11,7 +11,8 @@ Works with any agent whose hooks send JSON on stdin (session_id, cwd):
 
 <agent> is a short name shown in the bubble: claude, gemini, codex, … (unknown names are capitalized).
 
-- stop: for turns ≥ ORBI_AGENT_MIN_SECONDS (default 60). Plain: a "finished" bubble that closes itself.
+- stop: every turn is logged in Orbi's Agents list (`orbi://agent/log`, no bubble). Turns
+  ≥ ORBI_AGENT_MIN_SECONDS (default 60) also get a "finished" bubble that closes itself.
   With --reply (Claude, hook set to `asyncRewake`): the bubble shows the agent's last message with a
   reply field. A reply is written to stderr and the hook exits 2, which wakes Claude with it.
 - permission: an Allow / Deny / Terminal bubble. Allow or Deny is returned as the hook decision;
@@ -55,6 +56,8 @@ def safe(text, fallback):
 
 
 def duration_text(seconds):
+    if seconds < 60:
+        return "%d s" % max(1, int(seconds))
     minutes = int(round(seconds / 60.0))
     if minutes < 60:
         return "%d min" % max(1, minutes)
@@ -222,21 +225,28 @@ def on_permission(s, data, flags):
 def on_stop(s, data, flags):
     s.close_pending()
     started = s.take_start()
-    if started is None or time.time() - started < MIN_SECONDS:
-        return 0, {}
-    elapsed = duration_text(time.time() - started)
+    elapsed = time.time() - started if started is not None else None
+    long_turn = elapsed is not None and elapsed >= MIN_SECONDS
     title = "%s finished ✓" % s.name
-    message = "%s · %s" % (s.project, elapsed)
-    last = str(data.get("last_assistant_message") or "").strip()
-    if "--reply" not in flags or not last:
-        open_url(build_url("notify", title=title, message=message))
+    message = s.project + (" · %s" % duration_text(elapsed) if elapsed is not None else "")
+    # Claude: last_assistant_message; Gemini AfterAgent: prompt_response.
+    last = str(data.get("last_assistant_message") or data.get("prompt_response") or "").strip()
+
+    if long_turn and "--reply" in flags and last:
+        # Orbi logs the ask itself (and your reply) in its Agents list.
+        answer = ask(s, "reply", title, message, last[:3000], REPLY_TIMEOUT)
+        text = str((answer or {}).get("text") or "").strip()
+        if (answer or {}).get("action") == "reply" and text:
+            # asyncRewake: exit 2 wakes Claude and shows stderr to it.
+            sys.stderr.write("The user replied from Orbi (menu bar), treat it as their next message:\n%s\n" % text)
+            return 2, None
         return 0, {}
-    answer = ask(s, "reply", title, message, last[:3000], REPLY_TIMEOUT)
-    text = str((answer or {}).get("text") or "").strip()
-    if (answer or {}).get("action") == "reply" and text:
-        # asyncRewake: exit 2 wakes Claude and shows stderr to it.
-        sys.stderr.write("The user replied from Orbi (menu bar), treat it as their next message:\n%s\n" % text)
-        return 2, None
+
+    if long_turn:
+        open_url(build_url("notify", title=title, message=message))
+    if long_turn or last:
+        # Every turn lands in Orbi's Agents list, bubble or not.
+        open_url(build_url("agent/log", title=title, subtitle=message, detail=last[:3000]))
     return 0, {}
 
 

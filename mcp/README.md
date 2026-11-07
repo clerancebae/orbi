@@ -7,7 +7,7 @@ Claude starts it on demand over stdio; it uses nothing while idle.
 ## Tools
 | Tool | What it does | Under the hood |
 |---|---|---|
-| `get_status` | Today's tasks, active task + time left, later-day tasks, water, next event, read-later + recently read | reads `status.json` |
+| `get_status` | Today's tasks, active task + time left, later-day tasks, water, next event, read-later + recently read, recent agent activity | reads `status.json` |
 | `add_tasks` | Add 1–30 tasks (title, optional `minutes`, optional `date`: today / tomorrow / YYYY-MM-DD) | `orbi://task/add` |
 | `start_next_task`, `complete_active_task` | Task timer control | `orbi://task/start-next`, `task/complete` |
 | `log_water`, `undo_water` | Water | `orbi://water/add`, `water/undo` |
@@ -31,7 +31,7 @@ One hook script for every agent CLI: `/usr/bin/python3 -I /path/to/Orbi/mcp/agen
 | Event | What you see | Claude Code | Gemini CLI |
 |---|---|---|---|
 | `prompt` | (remembers the start, closes open bubbles) | `UserPromptSubmit` | `BeforeAgent` |
-| `stop` | "finished ✓" after turns ≥ 60 s (`ORBI_AGENT_MIN_SECONDS`) | `Stop` | `AfterAgent` |
+| `stop` | every turn is logged in the Agents list (`orbi://agent/log`); turns ≥ 60 s (`ORBI_AGENT_MIN_SECONDS`) also get a "finished ✓" bubble | `Stop` | `AfterAgent` |
 | `stop --reply` | the same, plus Claude's last message and a reply field | `Stop` with `"asyncRewake": true` | – |
 | `permission` | the command with Allow / Deny / Terminal | `PermissionRequest` | – |
 | `wait` | sticky "needs you" until the agent continues | `Notification` (`elicitation_dialog\|agent_needs_input`) | `Notification` |

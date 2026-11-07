@@ -116,5 +116,8 @@ struct NotifyRouteTests {
         #expect(parse("orbi://ask?id=a&kind=reply") == .failure(.missingParameter("title")))
         #expect(parse("orbi://ask/cancel?id=ab-12") == .success(.askCancel(id: "ab-12")))
         #expect(parse("orbi://ask/cancel") == .failure(.invalidParameter("id")))
+        #expect(parse("orbi://agent/log?title=Claude%20finished&subtitle=Orbi%20%C2%B7%2045%20s&detail=Done.")
+                == .success(.agentLog(title: "Claude finished", subtitle: "Orbi · 45 s", detail: "Done.")))
+        #expect(parse("orbi://agent/log?detail=x") == .failure(.missingParameter("title")))
     }
 }

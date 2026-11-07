@@ -32,6 +32,9 @@ enum SharedContainer {
 
     static var storeURL: URL { storeDirectory.appending(path: "Orbi.store") }
 
+    /// Rolling log of agent activity (`AgentLogStore`).
+    static var agentLogURL: URL { storeDirectory.appending(path: "agent-log.json") }
+
     /// `status.json`, read by Claude (MCP) and Touch Bar tools. Deliberately NOT in the group
     /// container: macOS 15+ blocks other apps' processes from reading group containers. The
     /// sandbox allows this one folder via a home-relative temporary-exception entitlement.
