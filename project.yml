@@ -1,0 +1,74 @@
+name: Orbi
+options:
+  bundleIdPrefix: com.berke
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: NB6868HT2X
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+targets:
+  Orbi:
+    type: application
+    platform: macOS
+    sources:
+      - path: Orbi
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.berke.Orbi
+        PRODUCT_NAME: Orbi
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_ENTITLEMENTS: Orbi/Resources/Orbi.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Orbi/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Orbi
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSCalendarsFullAccessUsageDescription: Orbi reads your calendar to show your next event and pause reminders during meetings.
+        OrbiAppGroupID: $(TeamIdentifierPrefix)com.berke.orbi
+        CFBundleURLTypes:
+          - CFBundleURLName: com.berke.Orbi
+            CFBundleURLSchemes: [orbi]
+    entitlements:
+      path: Orbi/Resources/Orbi.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)com.berke.orbi
+        com.apple.security.personal-information.calendars: true
+        # status.json lives outside the protected group container so Claude (MCP) and
+        # Touch Bar tools can read it without extra permissions. Only this one folder.
+        com.apple.security.temporary-exception.files.home-relative-path.read-write:
+          - /Library/Application Support/Orbi/
+  OrbiTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: OrbiTests
+    dependencies:
+      - target: Orbi
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.berke.OrbiTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Orbi.app/Contents/MacOS/Orbi
+        BUNDLE_LOADER: $(TEST_HOST)
+schemes:
+  Orbi:
+    build:
+      targets:
+        Orbi: all
+        OrbiTests: [test]
+    test:
+      targets:
+        - OrbiTests
