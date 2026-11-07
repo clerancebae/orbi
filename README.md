@@ -59,6 +59,8 @@ Working with agents means a lot of waiting and a lot of window switching. You st
 - **Read later.** Save a link, close the tab, and get one gentle nudge a day to actually read it. Finished items are kept, so you can look back at what you read.
 - **Scriptable.** Everything is reachable through `orbi://` URLs (Shortcuts, shell scripts, CI). The current state is written to a `status.json` file.
 
+Only want the agent part? **Settings → Panel** hides Water and Read later (and their reminders).
+
 **Private by design:** a sandboxed SwiftUI + SwiftData app with no network access, no accounts and no analytics. It uses almost nothing while idle.
 
 ## Install

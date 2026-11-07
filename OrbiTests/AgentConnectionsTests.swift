@@ -44,6 +44,16 @@ struct AgentHookConfigTests {
         #expect(AgentHookConfig.status(of: fixed, kind: .claude, script: script) == .connected)
     }
 
+    @Test func replyModeOff() {
+        let plain = AgentHookConfig.connect([:], kind: .claude, script: script, replies: false)
+        #expect(commands(plain, "Stop") == ["/usr/bin/python3 -I '\(script)' claude stop"])
+        let stop = ((plain["hooks"] as? [String: Any])?["Stop"] as? [[String: Any]])?.first?["hooks"] as? [[String: Any]]
+        #expect(stop?.first?["asyncRewake"] == nil)
+        #expect(AgentHookConfig.status(of: plain, kind: .claude, script: script, replies: false) == .connected)
+        // Switching the setting makes the installed hooks outdated until rewritten.
+        #expect(AgentHookConfig.status(of: plain, kind: .claude, script: script, replies: true) == .outdated)
+    }
+
     @Test func geminiUsesItsEventsAndMilliseconds() {
         let s = AgentHookConfig.connect([:], kind: .gemini, script: script)
         let hooks = s["hooks"] as? [String: Any]

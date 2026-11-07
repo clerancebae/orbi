@@ -49,8 +49,9 @@ struct MenuBarLabel: View {
     let agents: AgentLogStore
 
     var body: some View {
-        let waterText = MenuBarText.water(count: water.todayCount, goal: settings.waterGoal,
-                                          reminderDue: reminders.isDue)
+        let waterText: String? = settings.showWater
+            ? MenuBarText.water(count: water.todayCount, goal: settings.waterGoal, reminderDue: reminders.isDue)
+            : nil
         let agentText = MenuBarText.agents(running: agents.running.count, waiting: agents.openAsks.count)
         if let active = tasks.activeTask {
             Text(MenuBarText.compose([
@@ -67,7 +68,7 @@ struct MenuBarLabel: View {
         } else {
             HStack(spacing: 4) {
                 Image(systemName: "checklist")
-                Text(waterText)
+                if let waterText { Text(waterText) }
             }
             .accessibilityLabel("Orbi")
         }

@@ -78,7 +78,7 @@ final class AppEnvironment {
         notifyBubble = NotifyBubble(presenter: bubbles)
         agentLog = AgentLogStore(fileURL: demoBubble ? nil : SharedContainer.agentLogURL)
         askBubble = AskBubble(presenter: bubbles, log: agentLog)
-        agentConnections = AgentConnections()
+        agentConnections = AgentConnections(replies: { settings.agentReplies })
         // Only the installed copy repairs hook paths, so a debug build never redirects them.
         if !demoBubble, Bundle.main.bundlePath.hasPrefix("/Applications/") {
             agentConnections.repairIfOutdated()
@@ -140,6 +140,7 @@ final class AppEnvironment {
 
         reminders.start()
         settings.onReadingNudgeChange = { [weak readingNudge] in readingNudge?.rearm() }
+        settings.onAgentRepliesChange = { [weak agentConnections] in agentConnections?.reconnectConnected() }
         readingNudge.rearm()
         statusExporter?.start()
 
@@ -168,110 +169,6 @@ final class AppEnvironment {
         readingNudge.rearm()
     }
 
-    // MARK: - URL scheme
-
-    private static let urlLog = Logger(subsystem: "com.berke.Orbi", category: "URLRouter")
-
-    /// Entry point for `orbi://` URLs (Touch Bar, scripts, Claude). Malformed URLs are
-    /// logged and ignored — never a crash.
-    func handle(url: URL) {
-        switch URLRouter.parse(url) {
-        case .success(let action):
-            Self.urlLog.info("URL action: \(url.absoluteString, privacy: .public)")
-            perform(action)
-        case .failure(let error):
-            Self.urlLog.error("Ignored URL \(url.absoluteString, privacy: .public): \(String(describing: error), privacy: .public)")
-        }
-    }
-
-    func perform(_ action: OrbiAction) {
-        switch action {
-        case .waterAdd:
-            waterStore.add()
-        case .waterUndo:
-            waterStore.undoLast()
-        case .taskStartNext:
-            taskStore.startNext()
-        case .taskComplete:
-            taskStore.completeActive()
-        case let .taskAdd(title, minutes, day):
-            taskStore.add(title: title, estimatedMinutes: minutes,
-                          on: day.resolve(now: .now, calendar: .current))
-        case let .readingSave(url, title):
-            readingStore.save(url: url, title: title)
-        case .readingOpenNext:
-            readingStore.openNext()
-        case let .notify(title, message, sticky, app):
-            notifyBubble.show(title: title, message: message, sticky: sticky, app: app)
-        case .notifyDismiss:
-            notifyBubble.dismissSticky()
-        case let .ask(ask):
-            askBubble.show(ask)
-        case let .askCancel(id):
-            askBubble.cancel(id: id)
-        case let .agentLog(title, subtitle, detail, context):
-            agentLog.add(AgentEvent(id: UUID().uuidString, date: .now, kind: .finished, title: title,
-                                    subtitle: subtitle, detail: detail, app: context.app))
-            agentLog.finishTurn(context)
-        case let .agentStart(context):
-            agentLog.start(context)
-        case let .agentStop(session):
-            agentLog.stop(session: session)
-        case .capture:
-            Self.urlLog.info("orbi://capture arrives with the quick-capture panel (Phase 4)")
-        }
-    }
-
-    // MARK: - Status snapshot
-
-    /// Reused: formatters are expensive to create and the snapshot is rebuilt on every change.
-    private static let dayFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
-        formatter.timeZone = .current
-        return formatter
-    }()
-
-    func makeSnapshot(now: Date = .now) -> StatusSnapshot {
-        let active = taskStore.activeTask
-        let remaining = active.flatMap { taskStore.remainingSeconds($0) }
-        let dayFormatter = Self.dayFormatter
-
-        return StatusSnapshot(
-            activeTask: active?.title,
-            remainingMin: remaining.map { $0 >= 0 ? DurationText.ceilMinutes($0) : -DurationText.ceilMinutes(-$0) },
-            elapsedMin: active.map { DurationText.floorMinutes(taskStore.elapsedSeconds($0)) },
-            water: waterStore.todayCount,
-            waterGoal: settings.waterGoal,
-            waterReminderDue: reminders.isDue,
-            nextWaterReminder: reminders.nextDue,
-            readingCount: readingStore.items.count,
-            nextEvent: calendar.nextEvent.map { "\($0.start.formatted(date: .omitted, time: .shortened)) \($0.title)" },
-            tasks: (taskStore.openTasks + taskStore.doneTasks).map {
-                .init(title: $0.title, status: $0.status.rawValue, estimateMin: $0.estimatedMinutes,
-                      spentMin: DurationText.floorMinutes(taskStore.elapsedSeconds($0)))
-            },
-            upcoming: taskStore.upcoming.map {
-                .init(title: $0.title, date: dayFormatter.string(from: $0.plannedDate), estimateMin: $0.estimatedMinutes)
-            },
-            reading: readingStore.items.map {
-                .init(title: $0.title, url: $0.url.absoluteString, savedAt: $0.savedAt,
-                      opened: $0.openedAt != nil, snoozed: readingStore.isSnoozed($0))
-            },
-            read: readingStore.finished.prefix(30).compactMap { item in
-                item.finishedAt.map { .init(title: item.title, url: item.url.absoluteString, finishedAt: $0) }
-            },
-            agents: agentLog.events.prefix(10).map {
-                .init(date: $0.date, kind: $0.kind.rawValue, title: $0.title, subtitle: $0.subtitle,
-                      detail: $0.detail.map { String($0.prefix(300)) }, outcome: $0.outcome?.rawValue,
-                      reply: $0.reply)
-            },
-            agentsRunning: agentLog.running.map { .init(agent: $0.agent, project: $0.project, since: $0.startedAt) },
-            agentsToday: agentLog.today.turns > 0 ? agentLog.today : nil,
-            updatedAt: now
-        )
-    }
-
     /// Debug builds only: `-OrbiDemoBubble` / `-OrbiScreenshots` run on a throwaway in-memory store.
     @inline(never)
     private static func isDemoMode() -> Bool {
@@ -296,16 +193,3 @@ final class AppEnvironment {
 
 /// Marker used to route debug demo mode to an in-memory store.
 private struct DemoMode: Error {}
-
-/// Lets the exporter's closure reach the environment without a capture cycle during init.
-@MainActor
-enum StatusSnapshotBuilder {
-    static weak var environment: AppEnvironment?
-    static var current: StatusSnapshot {
-        // The exporter only runs after `environment` is set at the end of init.
-        environment?.makeSnapshot() ?? StatusSnapshot(
-            activeTask: nil, remainingMin: nil, elapsedMin: nil, water: 0, waterGoal: 0,
-            waterReminderDue: false, nextWaterReminder: nil, readingCount: 0, nextEvent: nil,
-            tasks: [], upcoming: [], reading: [], read: [], updatedAt: .now)
-    }
-}

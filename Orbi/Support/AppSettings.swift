@@ -32,6 +32,9 @@ final class AppSettings {
         static let readingNudgeEnabled = "readingNudgeEnabled"
         static let readingNudgeMinutes = "readingNudgeMinutes"
         static let lastReadingNudgeDay = "lastReadingNudgeDay"
+        static let showWater = "showWater"
+        static let showReading = "showReading"
+        static let agentReplies = "agentReplies"
     }
 
     @ObservationIgnored private let defaults: UserDefaults
@@ -54,6 +57,19 @@ final class AppSettings {
         didSet { defaults.set(readingNudgeMinutes, forKey: Key.readingNudgeMinutes); onReadingNudgeChange?() }
     }
 
+    /// Water in the panel and menu bar (and its reminders). Off for people who only want the agent part.
+    var showWater: Bool { didSet { persist(showWater, Key.showWater) } }
+    /// Read later in the panel (and its daily nudge).
+    var showReading: Bool {
+        didSet { defaults.set(showReading, forKey: Key.showReading); onReadingNudgeChange?() }
+    }
+    /// Claude's "finished" bubble offers a reply field (async Stop hook). Off = a plain
+    /// "finished" bubble, e.g. if a Claude Code update ever changes how that hook behaves.
+    var agentReplies: Bool {
+        didSet { defaults.set(agentReplies, forKey: Key.agentReplies); onAgentRepliesChange?() }
+    }
+    @ObservationIgnored var onAgentRepliesChange: (() -> Void)?
+
     /// Day ("YYYY-MM-DD") the reading nudge last ran. Not observed; only the scheduler uses it.
     var lastReadingNudgeDay: String? {
         get { defaults.string(forKey: Key.lastReadingNudgeDay) }
@@ -72,6 +88,9 @@ final class AppSettings {
             Key.includeWeekends: d.includeWeekends,
             Key.readingNudgeEnabled: true,
             Key.readingNudgeMinutes: 21 * 60,
+            Key.showWater: true,
+            Key.showReading: true,
+            Key.agentReplies: true,
         ])
         self.defaults = defaults
         waterGoal = defaults.integer(forKey: Key.waterGoal)
@@ -83,14 +102,17 @@ final class AppSettings {
         includeWeekends = defaults.bool(forKey: Key.includeWeekends)
         readingNudgeEnabled = defaults.bool(forKey: Key.readingNudgeEnabled)
         readingNudgeMinutes = defaults.integer(forKey: Key.readingNudgeMinutes)
+        showWater = defaults.bool(forKey: Key.showWater)
+        showReading = defaults.bool(forKey: Key.showReading)
+        agentReplies = defaults.bool(forKey: Key.agentReplies)
     }
 
     var readingNudgeConfig: ReadingNudgeScheduler.Config {
-        .init(enabled: readingNudgeEnabled, minutes: readingNudgeMinutes)
+        .init(enabled: readingNudgeEnabled && showReading, minutes: readingNudgeMinutes)
     }
 
     var reminderSettings: ReminderSettings {
-        ReminderSettings(enabled: remindersEnabled, intervalMinutes: reminderIntervalMinutes,
+        ReminderSettings(enabled: remindersEnabled && showWater, intervalMinutes: reminderIntervalMinutes,
                          workStartMinutes: workStartMinutes, workEndMinutes: workEndMinutes,
                          includeWeekends: includeWeekends)
     }

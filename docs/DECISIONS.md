@@ -158,3 +158,9 @@ Competitors (Vibe Notch, Claude Status Bar, VibeBar) all install their hooks the
 
 ### "Always" in the permission bubble
 `PermissionRequest` input carries `permission_suggestions`, the rules behind the terminal's "Yes, and don't ask again". The hook shows **Always** when there is an allow suggestion (labelled like `Bash(npm test:*)`), and on click returns `allow` with those suggestions as `updatedPermissions`, the same as choosing it in the terminal.
+
+### Review follow-ups: focus, a fallback switch, smaller files
+- **Settings → Panel:** `showWater` / `showReading` hide those sections (and the water count in the menu bar). Hiding also turns their reminders off (`reminderSettings.enabled = remindersEnabled && showWater`, same for the reading nudge) without touching the reminder toggles themselves, so turning a section back on restores them.
+- **Settings → AI agents → "Reply from the finished bubble":** the reply feature depends on Claude Code running an `asyncRewake` Stop hook in the background, which the docs don't spell out for `Stop`. If an update ever breaks that, this switch rewrites the connected hooks to a plain synchronous `stop` (a "finished" bubble with no reply field). Hook status now compares the exact set of Orbi commands, so a changed reply mode or script path shows as "Needs update".
+- `AppEnvironment` was split: `AppEnvironment+URLActions.swift` (every `orbi://` action) and `AppEnvironment+Status.swift` (the `status.json` snapshot).
+- Live checks: three Claude sessions at once (start, stop, idle) against the installed app. A real Gemini CLI turn couldn't run here (the account's Gemini setup fails with `IneligibleOrProjectIdError`); iTerm2 / VS Code aren't installed, so "go to app" was verified with Terminal only.

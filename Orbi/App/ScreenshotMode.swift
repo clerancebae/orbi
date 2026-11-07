@@ -78,7 +78,8 @@ enum ScreenshotMode {
         env.askBubble.show(AgentAsk(
             id: "demo-permission", kind: .permission, title: "Claude wants to use Bash", message: "orbi",
             detail: "git push origin main",
-            context: AgentContext(session: "demo-1", agent: "Claude", project: "orbi", app: terminal)))
+            context: AgentContext(session: "demo-1", agent: "Claude", project: "orbi", app: terminal),
+            alwaysRule: "Bash(git push:*)"))
         env.askBubble.show(AgentAsk(
             id: "demo-reply", kind: .reply, title: "Claude finished ✓", message: "api · 7 min",
             detail: "Fixed the **flaky login test** (a race in the session mock) and added a regression test. "

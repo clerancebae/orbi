@@ -31,6 +31,8 @@ struct SettingsView: View {
                         }
                     }
                 }
+                Toggle("Reply from the “finished” bubble", isOn: $settings.agentReplies)
+                    .help("Off: a plain “finished” bubble instead of one with a reply field")
                 Text("Adds Orbi's hooks to the agent's settings.json (your own hooks stay; a backup is kept): "
                      + "permission and reply bubbles, 🤖 in the menu bar, the Agents list.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -50,33 +52,44 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Water") {
-                Stepper("Daily goal: \(settings.waterGoal) glasses", value: $settings.waterGoal, in: 1...20)
-                Stepper("Glass size: \(settings.glassSizeMl) ml", value: $settings.glassSizeMl, in: 100...1000, step: 50)
-            }
-
-            Section("Water & break reminders") {
-                Toggle("Remind me", isOn: $settings.remindersEnabled)
-                Picker("Every", selection: $settings.reminderIntervalMinutes) {
-                    ForEach(Self.intervals, id: \.self) { Text("\($0) minutes").tag($0) }
-                }
-                DatePicker("Workday starts", selection: time(\.workStartMinutes), displayedComponents: .hourAndMinute)
-                DatePicker("Workday ends", selection: time(\.workEndMinutes), displayedComponents: .hourAndMinute)
-                Toggle("Also on weekends", isOn: $settings.includeWeekends)
-                if settings.workEndMinutes <= settings.workStartMinutes {
-                    Label("The workday must end after it starts.", systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
-                }
-                Text("Reminders only come during working hours and wait until a calendar event is over.")
+            Section("Panel") {
+                Toggle("Water (panel, menu bar and reminders)", isOn: $settings.showWater)
+                Toggle("Read later (panel and daily reminder)", isOn: $settings.showReading)
+                Text("Turn these off if you only want Orbi for your AI agents.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("Read later") {
-                Toggle("Daily reminder", isOn: $settings.readingNudgeEnabled)
-                DatePicker("At", selection: time(\.readingNudgeMinutes), displayedComponents: .hourAndMinute)
-                    .disabled(!settings.readingNudgeEnabled)
-                Text("At most once a day, only if something is waiting.")
-                    .font(.caption).foregroundStyle(.secondary)
+            if settings.showWater {
+                Section("Water") {
+                    Stepper("Daily goal: \(settings.waterGoal) glasses", value: $settings.waterGoal, in: 1...20)
+                    Stepper("Glass size: \(settings.glassSizeMl) ml", value: $settings.glassSizeMl, in: 100...1000, step: 50)
+                }
+
+                Section("Water & break reminders") {
+                    Toggle("Remind me", isOn: $settings.remindersEnabled)
+                    Picker("Every", selection: $settings.reminderIntervalMinutes) {
+                        ForEach(Self.intervals, id: \.self) { Text("\($0) minutes").tag($0) }
+                    }
+                    DatePicker("Workday starts", selection: time(\.workStartMinutes), displayedComponents: .hourAndMinute)
+                    DatePicker("Workday ends", selection: time(\.workEndMinutes), displayedComponents: .hourAndMinute)
+                    Toggle("Also on weekends", isOn: $settings.includeWeekends)
+                    if settings.workEndMinutes <= settings.workStartMinutes {
+                        Label("The workday must end after it starts.", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                    }
+                    Text("Reminders only come during working hours and wait until a calendar event is over.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            if settings.showReading {
+                Section("Read later") {
+                    Toggle("Daily reminder", isOn: $settings.readingNudgeEnabled)
+                    DatePicker("At", selection: time(\.readingNudgeMinutes), displayedComponents: .hourAndMinute)
+                        .disabled(!settings.readingNudgeEnabled)
+                    Text("At most once a day, only if something is waiting.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
 
             Section("Permissions") {

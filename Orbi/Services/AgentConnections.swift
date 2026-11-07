@@ -36,8 +36,9 @@ enum AgentHookConfig {
         case outdated
     }
 
-    /// The hook entries for `kind`, calling the script at `script`.
-    static func hooks(for kind: AgentKind, script: String) -> [String: [[String: Any]]] {
+    /// The hook entries for `kind`, calling the script at `script`. `replies`: Claude's Stop hook
+    /// runs async and offers a reply field; off = a plain "finished" bubble.
+    static func hooks(for kind: AgentKind, script: String, replies: Bool = true) -> [String: [[String: Any]]] {
         let run = "/usr/bin/python3 -I '\(script)' \(kind.rawValue)"
         // After every tool call: plain shell checks for an open bubble; Python starts only then.
         let guarded = #"set -- "${TMPDIR:-/tmp}"/orbi-agent-hook/\#(kind.rawValue)-*.pending.*; "#
@@ -54,7 +55,9 @@ enum AgentHookConfig {
         case .claude:
             return [
                 "UserPromptSubmit": group(entry("\(run) prompt", timeout: 10)),
-                "Stop": group(entry("\(run) stop --reply", timeout: 3600, extra: ["asyncRewake": true])),
+                "Stop": group(replies
+                    ? entry("\(run) stop --reply", timeout: 3600, extra: ["asyncRewake": true])
+                    : entry("\(run) stop", timeout: 10)),
                 "PermissionRequest": group(entry("\(run) permission", timeout: 600)),
                 "Notification": group(entry("\(run) wait", timeout: 10),
                                       matcher: "elicitation_dialog|agent_needs_input|idle_prompt"),
@@ -70,19 +73,21 @@ enum AgentHookConfig {
         }
     }
 
-    static func status(of settings: [String: Any], kind: AgentKind, script: String) -> Status {
+    /// Connected only if Orbi's commands are exactly the current ones (script path, reply mode).
+    static func status(of settings: [String: Any], kind: AgentKind, script: String, replies: Bool = true) -> Status {
         let commands = orbiCommands(in: settings)
         guard !commands.isEmpty else { return .notConnected }
-        let wanted = hooks(for: kind, script: script).keys.count
-        let current = commands.filter { $0.contains("'\(script)'") }.count
-        return current == wanted && commands.count == wanted ? .connected : .outdated
+        let wanted = hooks(for: kind, script: script, replies: replies).values
+            .flatMap { $0.flatMap { ($0["hooks"] as? [[String: Any]] ?? []).compactMap { $0["command"] as? String } } }
+        return commands.sorted() == wanted.sorted() ? .connected : .outdated
     }
 
     /// Removes any old Orbi hooks, then adds the current ones.
-    static func connect(_ settings: [String: Any], kind: AgentKind, script: String) -> [String: Any] {
+    static func connect(_ settings: [String: Any], kind: AgentKind, script: String,
+                        replies: Bool = true) -> [String: Any] {
         var result = disconnect(settings)
         var hooksDict = result["hooks"] as? [String: Any] ?? [:]
-        for (event, groups) in hooks(for: kind, script: script) {
+        for (event, groups) in hooks(for: kind, script: script, replies: replies) {
             hooksDict[event] = (hooksDict[event] as? [[String: Any]] ?? []) + groups
         }
         result["hooks"] = hooksDict
@@ -134,11 +139,14 @@ final class AgentConnections {
 
     @ObservationIgnored private let home: URL
     @ObservationIgnored private let scriptsDirectory: URL?
+    @ObservationIgnored private let replies: () -> Bool
     @ObservationIgnored private let log = Logger(subsystem: "com.berke.Orbi", category: "AgentConnections")
 
-    init(home: URL = SharedContainer.realHomeDirectory, scriptsDirectory: URL? = Bundle.main.resourceURL) {
+    init(home: URL = SharedContainer.realHomeDirectory, scriptsDirectory: URL? = Bundle.main.resourceURL,
+         replies: @escaping () -> Bool = { true }) {
         self.home = home
         self.scriptsDirectory = scriptsDirectory
+        self.replies = replies
         refresh()
     }
 
@@ -176,7 +184,8 @@ final class AgentConnections {
     func refresh() {
         guard let script = hookScript else { return }
         for kind in AgentKind.allCases {
-            statuses[kind] = AgentHookConfig.status(of: readSettings(kind) ?? [:], kind: kind, script: script)
+            statuses[kind] = AgentHookConfig.status(of: readSettings(kind) ?? [:], kind: kind, script: script,
+                                                    replies: replies())
         }
     }
 
@@ -185,7 +194,14 @@ final class AgentConnections {
             lastError = "The hook script is missing from Orbi.app."
             return
         }
-        write(kind) { AgentHookConfig.connect($0, kind: kind, script: script) }
+        let replies = replies()
+        write(kind) { AgentHookConfig.connect($0, kind: kind, script: script, replies: replies) }
+    }
+
+    /// After a setting that changes the hooks (reply mode): rewrite the connected agents.
+    func reconnectConnected() {
+        refresh()
+        for kind in AgentKind.allCases where status(kind) != .notConnected { connect(kind) }
     }
 
     func disconnect(_ kind: AgentKind) {

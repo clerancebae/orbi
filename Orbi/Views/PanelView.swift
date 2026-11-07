@@ -10,6 +10,7 @@ struct PanelView: View {
     @Environment(NotificationService.self) private var notifications
     @Environment(CalendarService.self) private var calendar
     @Environment(AgentLogStore.self) private var agentLog
+    @Environment(AppSettings.self) private var settings
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -17,10 +18,14 @@ struct PanelView: View {
             AgentsSection()
             Divider()
             TodaySection()
-            Divider()
-            WaterSection()
-            Divider()
-            ReadingSection()
+            if settings.showWater {
+                Divider()
+                WaterSection()
+            }
+            if settings.showReading {
+                Divider()
+                ReadingSection()
+            }
 
             if let storeError {
                 Label("Data not saved: \(storeError)", systemImage: "exclamationmark.triangle")
