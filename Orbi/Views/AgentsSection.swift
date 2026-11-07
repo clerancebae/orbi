@@ -88,7 +88,8 @@ private struct RunningRow: View {
             ProgressView().controlSize(.mini).frame(width: 16)
             Text([agent.agent, agent.project].compactMap { $0 }.joined(separator: " · "))
                 .font(.callout).lineLimit(1)
-            Text("working \(agent.startedAt, style: .relative)")
+            // Static minutes (refreshed whenever the panel re-renders), not a per-second timer.
+            Text("working " + DurationText.minutes(max(1, DurationText.floorMinutes(Int(Date.now.timeIntervalSince(agent.startedAt))))))
                 .font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
             Spacer(minLength: 4)
             if let app = agent.app {
@@ -156,7 +157,7 @@ private struct AgentEventRow: View {
     }
 
     private var secondLine: String {
-        let time = event.date.formatted(.relative(presentation: .numeric, unitsStyle: .abbreviated))
+        let time = Self.relativeTime(event.date)
         let preview = isExpanded ? nil : event.detail.map { Self.oneLine($0) }
         return [event.subtitle, time, preview].compactMap { $0 }.joined(separator: " · ")
     }
@@ -169,6 +170,12 @@ private struct AgentEventRow: View {
         case .replied: ("Replied", .accentColor)
         case .dismissed, nil: nil
         }
+    }
+
+    /// "just now" for the first minute (the plain formatter says "in 0 sec." for a fresh event).
+    static func relativeTime(_ date: Date, now: Date = .now) -> String {
+        if abs(now.timeIntervalSince(date)) < 60 { return "just now" }
+        return date.formatted(.relative(presentation: .numeric, unitsStyle: .abbreviated))
     }
 
     private static func oneLine(_ text: String) -> String {

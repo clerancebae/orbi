@@ -117,12 +117,12 @@ final class AgentLogStore {
 
     // MARK: - Running sessions
 
-    func start(_ context: AgentContext) {
+    func start(_ context: AgentContext, at date: Date? = nil) {
         guard let session = context.session else { return }
         pruneStale()
         running.removeAll { $0.session == session }
         running.append(RunningAgent(session: session, agent: context.agent ?? "Agent", project: context.project,
-                                    app: context.app, startedAt: now()))
+                                    app: context.app, startedAt: date ?? now()))
     }
 
     func stop(session: String) {

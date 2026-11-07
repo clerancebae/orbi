@@ -96,7 +96,9 @@ final class AppEnvironment {
         #if DEBUG
         // Debug-only: `open Orbi.app --args -OrbiDemoBubble` shows the bubble with a
         // throwaway in-memory task, for checking its look without waiting for a real timer.
-        if demoBubble, let task = taskStore.add(title: "Write API docs", estimatedMinutes: 5) {
+        if ScreenshotMode.isOn {
+            ScreenshotMode.run(self)
+        } else if demoBubble, let task = taskStore.add(title: "Write API docs", estimatedMinutes: 5) {
             taskStore.start(task)
             // Wait until launch finishes so the menu bar item exists to anchor to.
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [endingSoonBubble] in
@@ -264,11 +266,12 @@ final class AppEnvironment {
         )
     }
 
-    /// Debug builds only: `-OrbiDemoBubble` runs on a throwaway in-memory store.
+    /// Debug builds only: `-OrbiDemoBubble` / `-OrbiScreenshots` run on a throwaway in-memory store.
     @inline(never)
     private static func isDemoMode() -> Bool {
         #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("-OrbiDemoBubble")
+        let args = ProcessInfo.processInfo.arguments
+        return args.contains("-OrbiDemoBubble") || args.contains("-OrbiScreenshots")
         #else
         false
         #endif

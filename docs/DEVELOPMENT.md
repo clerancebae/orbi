@@ -73,3 +73,11 @@ One-time setup:
 3. `xcrun notarytool store-credentials orbi-notary --apple-id <apple id> --team-id <team id>` (asks for the password, stores it in the keychain).
 
 Each release: bump `MARKETING_VERSION` in `project.yml`, commit, then `scripts/release.sh` (or `--no-upload` to only build + notarize into `dist/`).
+
+## README screenshots
+Debug builds have a screenshot mode with sample data (never your real tasks or agent history):
+```sh
+osascript -e 'tell application id "com.berke.Orbi" to quit'   # only one Orbi at a time
+build/Build/Products/Debug/Orbi.app/Contents/MacOS/Orbi -OrbiScreenshots
+```
+It shows the permission and reply bubbles and opens the panel in a plain window. Capture each window with `screencapture -o -l <window id>` (ids from `CGWindowListCopyWindowInfo`), save to `docs/assets/`, then quit it and reopen the installed Orbi.

@@ -21,6 +21,16 @@
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
 </p>
 
+<table>
+  <tr>
+    <td rowspan="2" valign="top"><img src="docs/assets/panel.png" width="340" alt="Orbi panel: the Agents list with running sessions and today's summary, today's tasks, water and read later"></td>
+    <td valign="top"><img src="docs/assets/permission.png" width="300" alt="Permission bubble: Claude wants to use Bash, git push origin main, with Allow, Deny and Terminal buttons"></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/reply.png" width="300" alt="Reply bubble: Claude finished, shows its last message and a reply field"></td>
+  </tr>
+</table>
+
 ## Why
 
 Working with agents means a lot of waiting and a lot of window switching. You start a run, switch to something else, and either keep checking the terminal or forget about it for 20 minutes. Orbi sits in the menu bar and fixes both:

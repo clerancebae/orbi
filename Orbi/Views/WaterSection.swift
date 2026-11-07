@@ -1,6 +1,15 @@
 import SwiftUI
 
 struct WaterSection: View {
+    /// Screenshot mode (debug) hides the debug build's "notifications off" hint.
+    private static var hideNotificationHint: Bool {
+        #if DEBUG
+        ScreenshotMode.isOn
+        #else
+        false
+        #endif
+    }
+
     @Environment(WaterStore.self) private var water
     @Environment(AppSettings.self) private var settings
     @Environment(ReminderScheduler.self) private var reminders
@@ -33,7 +42,7 @@ struct WaterSection: View {
                 .font(.caption)
                 .foregroundStyle(reminders.isDue ? .orange : .secondary)
 
-            if notifications.authorization == .denied {
+            if notifications.authorization == .denied && !Self.hideNotificationHint {
                 Button("Notifications are off — turn them on in System Settings") {
                     notifications.openSystemSettings()
                 }
