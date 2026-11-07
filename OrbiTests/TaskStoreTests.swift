@@ -80,6 +80,24 @@ struct TaskStoreTests {
         #expect(b.spentSeconds == 300)
     }
 
+    @Test func sleepIsNotCountedAsWork() throws {
+        let store = makeStore()
+        let task = try #require(store.add(title: "Docs", estimatedMinutes: 30))
+        store.start(task)
+        clock.advance(minutes: 10)
+        store.systemWillSleep()
+        #expect(task.status == .active)
+        clock.advance(minutes: 600)  // lid closed for 10 hours
+        #expect(store.elapsedSeconds(task) == 10 * 60)
+        store.systemDidWake()
+        clock.advance(minutes: 5)
+        store.refresh()
+        #expect(store.elapsedSeconds(task) == 15 * 60)
+        #expect(store.remainingSeconds(task) == 15 * 60)
+        store.pause(task)
+        #expect(task.spentSeconds == 15 * 60)
+    }
+
     @Test func remainingGoesNegativeWhenOver() throws {
         let store = makeStore()
         let a = try #require(store.add(title: "A", estimatedMinutes: 5))

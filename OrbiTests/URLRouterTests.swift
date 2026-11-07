@@ -119,5 +119,18 @@ struct NotifyRouteTests {
         #expect(parse("orbi://agent/log?title=Claude%20finished&subtitle=Orbi%20%C2%B7%2045%20s&detail=Done.")
                 == .success(.agentLog(title: "Claude finished", subtitle: "Orbi · 45 s", detail: "Done.")))
         #expect(parse("orbi://agent/log?detail=x") == .failure(.missingParameter("title")))
+        #expect(parse("orbi://agent/start?session=claude-ab_1&agent=Claude&project=Orbi&app=com.apple.Terminal")
+                == .success(.agentStart(AgentContext(session: "claude-ab_1", agent: "Claude", project: "Orbi",
+                                                     app: "com.apple.Terminal"))))
+        #expect(parse("orbi://agent/start?agent=Claude") == .failure(.invalidParameter("session")))
+        #expect(parse("orbi://agent/stop?session=claude-ab_1") == .success(.agentStop(session: "claude-ab_1")))
+        // Bad optional fields are dropped, the route still works.
+        #expect(parse("orbi://agent/log?title=t&session=..%2Fx&app=a%20b&seconds=-5")
+                == .success(.agentLog(title: "t", subtitle: nil, detail: nil, context: .none)))
+        #expect(parse("orbi://agent/log?title=t&seconds=420&project=api")
+                == .success(.agentLog(title: "t", subtitle: nil, detail: nil,
+                                      context: AgentContext(project: "api", seconds: 420))))
+        #expect(parse("orbi://notify?title=x&app=com.microsoft.VSCode")
+                == .success(.notify(title: "x", message: nil, sticky: false, app: "com.microsoft.VSCode")))
     }
 }

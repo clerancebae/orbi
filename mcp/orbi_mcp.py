@@ -183,6 +183,25 @@ def summarize(s):
         for r in read[:10]:
             lines.append("  - %s (%s)" % (r.get("title", ""), age_text(r.get("finishedAt"))))
 
+    running = s.get("agentsRunning") or []
+    today = s.get("agentsToday") or {}
+    if running or today:
+        lines.append("")
+        for r in running:
+            lines.append("Agent working now: %s%s (started %s)" % (
+                r.get("agent", "Agent"), (" · " + r["project"]) if r.get("project") else "", age_text(r.get("since"))))
+        if today:
+            parts = ["%s turns" % today.get("turns", 0)]
+            if today.get("seconds", 0) >= 60:
+                parts.insert(0, minutes_text(today["seconds"] // 60) + " of agent work")
+            if today.get("projects"):
+                parts.append("projects: " + ", ".join(today["projects"]))
+            if today.get("allowed") or today.get("denied"):
+                parts.append("%d approved, %d denied from Orbi" % (today.get("allowed", 0), today.get("denied", 0)))
+            if today.get("replies"):
+                parts.append("%d replies from Orbi" % today["replies"])
+            lines.append("Agents today: " + " · ".join(parts))
+
     agents = s.get("agents") or []
     if agents:
         lines.append("")

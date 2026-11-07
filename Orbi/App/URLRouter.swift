@@ -31,7 +31,7 @@ enum OrbiAction: Equatable, Sendable {
     case capture
     /// Info bubble (e.g. "Claude finished"). Closes by itself unless `sticky`
     /// (e.g. "Claude needs you"), which stays until closed or dismissed.
-    case notify(title: String, message: String?, sticky: Bool)
+    case notify(title: String, message: String?, sticky: Bool, app: String? = nil)
     /// Closes a sticky notify bubble (the agent continued). No-op otherwise.
     case notifyDismiss
     /// An AI agent asks the user something (permission, or "reply?" after a turn). The answer
@@ -40,7 +40,24 @@ enum OrbiAction: Equatable, Sendable {
     /// The question was answered elsewhere (e.g. in the terminal): close it without answering.
     case askCancel(id: String)
     /// Silent entry in the Agents list (a finished turn that showed no bubble).
-    case agentLog(title: String, subtitle: String?, detail: String?)
+    case agentLog(title: String, subtitle: String?, detail: String?, context: AgentContext = .none)
+    /// An agent session started a turn (menu bar shows it as running).
+    case agentStart(AgentContext)
+    /// The session's turn ended or it went idle (e.g. interrupted).
+    case agentStop(session: String)
+}
+
+/// Who is talking: which agent session, project and host app (for "go to project").
+struct AgentContext: Equatable, Sendable {
+    var session: String?
+    var agent: String?
+    var project: String?
+    /// Bundle id of the terminal / IDE the agent runs in.
+    var app: String?
+    /// Length of the finished turn, for the daily summary.
+    var seconds: Int?
+
+    static let none = AgentContext()
 }
 
 struct AgentAsk: Equatable {
@@ -51,6 +68,7 @@ struct AgentAsk: Equatable {
     let message: String?
     /// The command / file for a permission, or the agent's last message for a reply.
     let detail: String?
+    var context: AgentContext = .none
 }
 
 /// Parses `orbi://` URLs into actions. Pure — no side effects — so it's fully unit tested.
@@ -86,6 +104,13 @@ enum URLRouter {
         case "notify": return parseNotify(query)
         case "notify/dismiss": return .success(.notifyDismiss)
         case "ask": return parseAsk(query)
+        case "agent/start":
+            let context = parseContext(query)
+            guard context.session != nil else { return .failure(.invalidParameter("session")) }
+            return .success(.agentStart(context))
+        case "agent/stop":
+            guard let session = parseContext(query).session else { return .failure(.invalidParameter("session")) }
+            return .success(.agentStop(session: session))
         case "agent/log":
             guard let title = query["title"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty else {
                 return .failure(.missingParameter("title"))
@@ -95,7 +120,8 @@ enum URLRouter {
                 subtitle: query["subtitle"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                     .map { String($0.prefix(maxNotifyLength * 2)) },
                 detail: query["detail"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-                    .map { String($0.prefix(maxAskDetailLength)) }))
+                    .map { String($0.prefix(maxAskDetailLength)) },
+                context: parseContext(query)))
         case "ask/cancel":
             guard let id = query["id"], isValidAskID(id) else { return .failure(.invalidParameter("id")) }
             return .success(.askCancel(id: id))
@@ -152,7 +178,7 @@ enum URLRouter {
         let sticky = ["1", "true", "yes"].contains(query["sticky"]?.lowercased() ?? "")
         return .success(.notify(title: String((title ?? "Orbi").prefix(maxNotifyLength)),
                                 message: message.map { String($0.prefix(maxNotifyLength * 2)) },
-                                sticky: sticky))
+                                sticky: sticky, app: parseContext(query).app))
     }
 
     static let maxAskDetailLength = 4000
@@ -172,7 +198,28 @@ enum URLRouter {
         let detail = query["detail"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         return .success(.ask(AgentAsk(id: id, kind: kind, title: String(title.prefix(maxNotifyLength)),
                                       message: message.map { String($0.prefix(maxNotifyLength * 2)) },
-                                      detail: detail.map { String($0.prefix(maxAskDetailLength)) })))
+                                      detail: detail.map { String($0.prefix(maxAskDetailLength)) },
+                                      context: parseContext(query))))
+    }
+
+    /// Optional agent fields shared by agent routes. Invalid values are dropped, not errors,
+    /// so an old or odd hook still gets its bubble.
+    static func parseContext(_ query: [String: String]) -> AgentContext {
+        func plain(_ key: String, max: Int, extra: Set<Character> = []) -> String? {
+            guard let value = query[key], (1...max).contains(value.count),
+                  value.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || extra.contains($0)) })
+            else { return nil }
+            return value
+        }
+        let text: (String, Int) -> String? = { key, max in
+            query[key]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty.map { String($0.prefix(max)) }
+        }
+        return AgentContext(
+            session: plain("session", max: 120, extra: ["-", "_"]),
+            agent: text("agent", 40),
+            project: text("project", 120),
+            app: plain("app", max: 155, extra: [".", "-"]),
+            seconds: query["seconds"].flatMap(Int.init).flatMap { (0...86_400).contains($0) ? $0 : nil })
     }
 
     /// "today", "tomorrow" or "YYYY-MM-DD".

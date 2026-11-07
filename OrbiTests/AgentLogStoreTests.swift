@@ -38,4 +38,48 @@ struct AgentLogStoreTests {
         reopened.clear()
         #expect(AgentLogStore(fileURL: url).events.isEmpty)
     }
+
+    @Test func runningSessionsAndDayStats() {
+        let clock = TestClock(Date(timeIntervalSince1970: 1_793_000_000))
+        let store = AgentLogStore(fileURL: nil, now: { clock.now })
+        store.start(AgentContext(session: "claude-1", agent: "Claude", project: "Orbi", app: "com.apple.Terminal"))
+        store.start(AgentContext(session: "claude-2", agent: "Claude", project: "api"))
+        store.start(AgentContext(session: "claude-1", agent: "Claude", project: "Orbi"))  // restart, no duplicate
+        #expect(store.running.map(\.session) == ["claude-2", "claude-1"])
+        store.finishTurn(AgentContext(session: "claude-1", project: "Orbi", seconds: 420))
+        store.finishTurn(AgentContext(session: "claude-x", project: "Orbi", seconds: 60))
+        #expect(store.running.map(\.session) == ["claude-2"])
+        #expect(store.today.turns == 2)
+        #expect(store.today.seconds == 480)
+        #expect(store.today.projects == ["Orbi"])
+        store.start(AgentContext(session: "ignored"))
+        store.stop(session: "ignored")
+        store.start(AgentContext())  // no session → ignored
+        #expect(store.running.count == 1)
+        clock.advance(minutes: 4 * 60)
+        store.pruneStale()
+        #expect(store.running.isEmpty)  // closed terminal mid-turn
+    }
+
+    @Test func outcomesCountForToday() {
+        let store = AgentLogStore(fileURL: nil)
+        for (id, outcome) in [("a", AgentEvent.Outcome.allowed), ("b", .allowed), ("c", .denied), ("d", .replied), ("e", .terminal)] {
+            store.add(event(id))
+            store.askOpened(id)
+            store.setOutcome(id: id, outcome)
+        }
+        #expect(store.openAsks.isEmpty)
+        #expect((store.today.allowed, store.today.denied, store.today.replies) == (2, 1, 1))
+    }
+
+    @Test func readsFirstVersionFile() throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "agent-log-v1-\(UUID()).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let v1 = #"[{"id":"x","date":"2026-11-07T10:00:00Z","kind":"finished","title":"Claude finished ✓"}]"#
+        try Data(v1.utf8).write(to: url)
+        let store = AgentLogStore(fileURL: url)
+        #expect(store.events.map(\.id) == ["x"])
+        store.finishTurn(AgentContext(project: "Orbi", seconds: 90))
+        #expect(AgentLogStore(fileURL: url).today.turns == 1)  // saved in the new format
+    }
 }

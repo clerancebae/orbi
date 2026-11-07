@@ -15,10 +15,10 @@ final class NotifyBubble {
         self.presenter = presenter
     }
 
-    func show(title: String, message: String?, sticky: Bool = false) {
+    func show(title: String, message: String?, sticky: Bool = false, app: String? = nil) {
         presenter.show(key: Self.key, sound: sticky ? "Ping" : "Glass") { close in
             VStack(alignment: .leading, spacing: 6) {
-                BubbleHeader(title: title, close: close)
+                BubbleHeader(title: title, app: app, close: close)
                 if let message {
                     Text(message)
                         .font(.callout)

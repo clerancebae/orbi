@@ -17,7 +17,10 @@ Works with any agent whose hooks send JSON on stdin (session_id, cwd):
   reply field. A reply is written to stderr and the hook exits 2, which wakes Claude with it.
 - permission: an Allow / Deny / Terminal bubble. Allow or Deny is returned as the hook decision;
   Terminal, ✕ or a timeout returns nothing, so the normal terminal prompt applies.
-- wait: a sticky "needs you" bubble until the agent continues. Idle reminders and auth notices are ignored.
+- prompt: marks the session as running (menu bar 🤖) and closes this session's open bubbles.
+- wait: a sticky "needs you" bubble until the agent continues. `idle_prompt` instead ends the running
+  state (covers turns interrupted with Esc, where Stop doesn't fire). Auth notices are ignored.
+- The host app (`__CFBundleIdentifier` / `TERM_PROGRAM`) is passed along, so Orbi's ↗ brings it forward.
 - prompt / resume close this session's open bubbles (answered in the terminal). resume runs after every
   tool call, so its hook command first checks for a pending file in pure shell; Python only starts then.
 
@@ -72,8 +75,20 @@ def open_url(url):
 
 
 def build_url(route, **params):
-    query = "&".join("%s=%s" % (k, quote(str(v), safe="")) for k, v in params.items() if v)
+    query = "&".join("%s=%s" % (k, quote(str(v), safe="")) for k, v in params.items() if v not in (None, ""))
     return "orbi://%s%s" % (route, ("?" + query) if query else "")
+
+
+# TERM_PROGRAM → bundle id, for terminals launched without __CFBundleIdentifier (e.g. via ssh/tmux).
+TERM_APPS = {"Apple_Terminal": "com.apple.Terminal", "iTerm.app": "com.googlecode.iterm2",
+             "vscode": "com.microsoft.VSCode", "ghostty": "com.mitchellh.ghostty",
+             "WezTerm": "com.github.wez.wezterm", "WarpTerminal": "dev.warp.Warp-Stable"}
+
+
+def host_app():
+    """Bundle id of the terminal / IDE this agent runs in, for Orbi's "go to project" (↗)."""
+    app = os.environ.get("__CFBundleIdentifier") or TERM_APPS.get(os.environ.get("TERM_PROGRAM", ""), "")
+    return app if re.match(r"^[A-Za-z0-9.-]{1,155}$", app or "") else None
 
 
 class Session:
@@ -82,6 +97,12 @@ class Session:
         self.id = safe(data.get("session_id"), "default")
         self.name = NAMES.get(agent.lower(), agent[:20].capitalize() or "Agent")
         self.project = os.path.basename((data.get("cwd") or os.getcwd()).rstrip("/")) or self.name
+        self.app = host_app()
+
+    def context(self, seconds=None):
+        """Agent fields Orbi uses for the running list, "go to project" and the day summary."""
+        return {"session": "%s-%s" % (self.agent, self.id), "agent": self.name, "project": self.project,
+                "app": self.app, "seconds": int(seconds) if seconds is not None else None}
 
     def path(self, ext):
         return os.path.join(STATE_DIR, "%s-%s.%s" % (self.agent, self.id, ext))
@@ -158,11 +179,12 @@ def wait_answer(ask_id, timeout):
     return None
 
 
-def ask(s, kind, title, message, detail, timeout):
+def ask(s, kind, title, message, detail, timeout, seconds=None):
     """Shows an interactive bubble and waits for the answer (None if it timed out)."""
     ask_id = uuid.uuid4().hex[:16]
     pending = s.add_pending(kind, ask_id)
-    open_url(build_url("ask", id=ask_id, kind=kind, title=title, message=message, detail=detail))
+    open_url(build_url("ask", id=ask_id, kind=kind, title=title, message=message, detail=detail,
+                       **s.context(seconds)))
     answer = wait_answer(ask_id, timeout)
     try:
         os.remove(pending)
@@ -188,6 +210,7 @@ def describe_tool(tool, tool_input):
 def on_prompt(s, data, flags):
     s.close_pending()
     s.mark_start()
+    open_url(build_url("agent/start", **s.context()))
     return 0, {}
 
 
@@ -198,12 +221,16 @@ def on_resume(s, data, flags):
 
 def on_wait(s, data, flags):
     kind = str(data.get("notification_type") or "")
+    if kind == "idle_prompt":
+        # Idle for a minute: the turn is over even if Stop never fired (e.g. interrupted with Esc).
+        open_url(build_url("agent/stop", session=s.context()["session"]))
+        return 0, {}
     if not WAIT_ENABLED or kind in IGNORED_NOTIFICATIONS:
         return 0, {}
     detail = str(data.get("message") or "Waiting for your answer").strip()
     s.add_pending("wait")
     open_url(build_url("notify", title="%s needs you" % s.name,
-                       message="%s · %s" % (s.project, detail[:200]), sticky=1))
+                       message="%s · %s" % (s.project, detail[:200]), sticky=1, app=s.app))
     return 0, {}
 
 
@@ -234,7 +261,7 @@ def on_stop(s, data, flags):
 
     if long_turn and "--reply" in flags and last:
         # Orbi logs the ask itself (and your reply) in its Agents list.
-        answer = ask(s, "reply", title, message, last[:3000], REPLY_TIMEOUT)
+        answer = ask(s, "reply", title, message, last[:3000], REPLY_TIMEOUT, seconds=elapsed)
         text = str((answer or {}).get("text") or "").strip()
         if (answer or {}).get("action") == "reply" and text:
             # asyncRewake: exit 2 wakes Claude and shows stderr to it.
@@ -243,10 +270,9 @@ def on_stop(s, data, flags):
         return 0, {}
 
     if long_turn:
-        open_url(build_url("notify", title=title, message=message))
-    if long_turn or last:
-        # Every turn lands in Orbi's Agents list, bubble or not.
-        open_url(build_url("agent/log", title=title, subtitle=message, detail=last[:3000]))
+        open_url(build_url("notify", title=title, message=message, app=s.app))
+    # Every turn lands in Orbi's Agents list (bubble or not) and ends the "running" state.
+    open_url(build_url("agent/log", title=title, subtitle=message, detail=last[:3000], **s.context(elapsed)))
     return 0, {}
 
 

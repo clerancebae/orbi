@@ -345,13 +345,53 @@ final class TaskStore {
         }
     }
 
+    // MARK: - Sleep
+
+    /// The Mac is going to sleep or the screen got locked: bank the active task's time so far.
+    /// The task stays active, but time away (lunch, a task left running overnight) isn't work.
+    func systemWillSleep() {
+        guard let active = activeTask, let startedAt = active.startedAt else { return }
+        tick()
+        active.spentSeconds += max(0, Int(currentDate.timeIntervalSince(startedAt)))
+        active.startedAt = nil
+        save()
+    }
+
+    /// Back from sleep / unlocked: the active task's clock resumes from now.
+    func systemDidWake() {
+        tick()
+        if let active = activeTask, active.startedAt == nil {
+            active.startedAt = currentDate
+            resetEndingSoonBaseline()
+            save()
+        }
+        refresh()
+    }
+
     private func observeSystemEvents() {
-        let handler: @Sendable (Notification) -> Void = { [weak self] _ in
+        let refresh: @Sendable (Notification) -> Void = { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
         observers.append(NotificationCenter.default.addObserver(
-            forName: .NSCalendarDayChanged, object: nil, queue: .main, using: handler))
-        observers.append(NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: handler))
+            forName: .NSCalendarDayChanged, object: nil, queue: .main, using: refresh))
+        let workspace = NSWorkspace.shared.notificationCenter
+        // Delivered on the main queue and handled synchronously, before the Mac sleeps.
+        observers.append(workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.systemWillSleep() }
+        })
+        observers.append(workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.systemDidWake() }
+        })
+        let distributed = DistributedNotificationCenter.default()
+        observers.append(distributed.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil,
+                                                 queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.systemWillSleep() }
+        })
+        observers.append(distributed.addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil,
+                                                 queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.systemDidWake() }
+        })
     }
 }

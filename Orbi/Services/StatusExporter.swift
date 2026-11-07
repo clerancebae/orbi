@@ -57,6 +57,15 @@ struct StatusSnapshot: Codable, Equatable, Sendable {
     var read: [Finished]
     /// Recent agent activity (permissions, finished turns), newest first (last 10).
     var agents: [Agent] = []
+    /// Sessions in the middle of a turn.
+    var agentsRunning: [Running] = []
+    var agentsToday: AgentDayStats?
+
+    struct Running: Codable, Equatable, Sendable {
+        var agent: String
+        var project: String?
+        var since: Date
+    }
     var updatedAt: Date
 
     /// Equal ignoring `updatedAt`, so an unchanged state is not rewritten.

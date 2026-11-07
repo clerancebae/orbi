@@ -29,6 +29,9 @@ Working with agents means a lot of waiting and a lot of window switching. You st
 ### For your AI agents
 - **Approve from the menu bar.** When Claude Code asks "may I run this?", a bubble shows the exact command with **Allow / Deny / Terminal**. No more switching windows to press Enter.
 - **Read and reply without the terminal.** When a long turn ends, the bubble shows what Claude said. Type your next instruction right there (or hit **Continue**) and Claude picks it up.
+- **See who's working.** The menu bar shows 🤖 while an agent is mid-turn (🤖3 for three sessions) and 🔔🤖 when one is waiting for you.
+- **Jump back in one click.** Every bubble and Agents row has a ↗ button that brings the agent's terminal or IDE to the front (Terminal, iTerm2, VS Code, Cursor, Ghostty, …).
+- **Daily summary.** "Today: 2h 10m across 3 projects · 14 turns · 12 approved · 3 replies", at the top of the Agents list and in `get_status`.
 - **See what your agent did.** The **Agents** list at the top of Orbi's panel keeps every finished turn (with Claude's last message), every permission request (with your answer) and your replies. Click a row to read it in full, or ask your agent "what did you do today?" over MCP.
 - **"Agent finished" bubble.** A small bubble under the menu bar icon when Claude Code, Gemini CLI or Codex finishes a turn longer than a minute: *"Claude finished ✓ · my-project · 7 min"*. Short replies stay quiet.
 - **MCP server.** Claude (Desktop and Code), Gemini CLI, Cursor, VS Code and any other MCP client can read your day and act on it: "plan my day: API docs 45m, review PR 20m", "start the next task", "save this link for later".
@@ -36,7 +39,7 @@ Working with agents means a lot of waiting and a lot of window switching. You st
 - **Zero-setup server.** One Python file, standard library only, runs on the macOS system Python. It starts only when the agent needs it.
 
 ### For you, while the agent works
-- **Tasks with a timer.** One active task with a countdown in the menu bar. Type `Write report 25m` to set an estimate. Tasks can be planned for later days.
+- **Tasks with a timer.** One active task with a countdown in the menu bar. The clock pauses while the Mac sleeps or the screen is locked. Type `Write report 25m` to set an estimate. Tasks can be planned for later days.
 - **Water and breaks.** Quiet reminders toward a daily goal. They skip calendar meetings.
 - **Read later.** Save a link, close the tab, and get one gentle nudge a day to actually read it. Finished items are kept, so you can look back at what you read.
 - **Scriptable.** Everything is reachable through `orbi://` URLs (Shortcuts, shell scripts, CI). The current state is written to a `status.json` file.

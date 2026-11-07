@@ -21,7 +21,7 @@ struct OrbiApp: App {
                 .modelContainer(env.modelContainer)
         } label: {
             MenuBarLabel(tasks: env.taskStore, water: env.waterStore, settings: env.settings,
-                         reminders: env.reminders, calendar: env.calendar)
+                         reminders: env.reminders, calendar: env.calendar, agents: env.agentLog)
         }
         .menuBarExtraStyle(.window)
 

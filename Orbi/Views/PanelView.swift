@@ -9,6 +9,7 @@ struct PanelView: View {
     @Environment(ReadingStore.self) private var reading
     @Environment(NotificationService.self) private var notifications
     @Environment(CalendarService.self) private var calendar
+    @Environment(AgentLogStore.self) private var agentLog
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -38,6 +39,7 @@ struct PanelView: View {
             reading.refresh()
             calendar.refresh()
             loginItems.refresh()
+            agentLog.pruneStale()
         }
         .task { await notifications.refreshAuthorization() }
     }

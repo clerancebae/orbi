@@ -50,3 +50,20 @@ struct MenuBarTextTests {
         #expect(DurationText.minutes(65) == "1h 05m")
     }
 }
+
+struct MenuBarAgentsTests {
+    @Test func agentIndicator() {
+        #expect(MenuBarText.agents(running: 0, waiting: 0) == nil)
+        #expect(MenuBarText.agents(running: 1, waiting: 0) == "🤖")
+        #expect(MenuBarText.agents(running: 3, waiting: 0) == "🤖3")
+        #expect(MenuBarText.agents(running: 1, waiting: 1) == "🔔🤖")
+        #expect(MenuBarText.agents(running: 0, waiting: 2) == "🔔🤖")  // turn over, reply bubble open
+    }
+
+    @Test func daySummary() {
+        #expect(AgentsSection.summary(AgentDayStats()) == nil)
+        let s = AgentDayStats(seconds: 7800, turns: 14, projects: ["Orbi", "api", "web"], allowed: 12, denied: 1, replies: 3)
+        #expect(AgentsSection.summary(s) == "Today: 2h 10m across 3 projects · 14 turns · 12 approved, 1 denied · 3 replies")
+        #expect(AgentsSection.summary(AgentDayStats(seconds: 30, turns: 1)) == "Today: 1 turn")
+    }
+}

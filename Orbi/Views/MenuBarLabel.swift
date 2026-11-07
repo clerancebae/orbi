@@ -21,6 +21,13 @@ enum MenuBarText {
         (reminderDue ? "🔔💧" : "💧") + "\(count)/\(goal)"
     }
 
+    /// "🤖", "🤖2" (two sessions working), "🔔🤖" (one is waiting for your answer); nil when idle.
+    static func agents(running: Int, waiting: Int) -> String? {
+        guard running > 0 || waiting > 0 else { return nil }
+        let count = max(running, 1)
+        return (waiting > 0 ? "🔔🤖" : "🤖") + (count > 1 ? "\(count)" : "")
+    }
+
     /// "📅 14:00"
     static func event(start: Date) -> String {
         "📅 " + start.formatted(date: .omitted, time: .shortened)
@@ -39,19 +46,24 @@ struct MenuBarLabel: View {
     let settings: AppSettings
     let reminders: ReminderScheduler
     let calendar: CalendarService
+    let agents: AgentLogStore
 
     var body: some View {
         let waterText = MenuBarText.water(count: water.todayCount, goal: settings.waterGoal,
                                           reminderDue: reminders.isDue)
+        let agentText = MenuBarText.agents(running: agents.running.count, waiting: agents.openAsks.count)
         if let active = tasks.activeTask {
             Text(MenuBarText.compose([
+                agentText,
                 MenuBarText.activeTask(title: active.title,
                                        remainingSeconds: tasks.remainingSeconds(active),
                                        elapsedSeconds: tasks.elapsedSeconds(active)),
                 waterText,
             ]))
         } else if let event = calendar.nextEvent {
-            Text(MenuBarText.compose([MenuBarText.event(start: event.start), waterText]))
+            Text(MenuBarText.compose([agentText, MenuBarText.event(start: event.start), waterText]))
+        } else if let agentText {
+            Text(MenuBarText.compose([agentText, waterText]))
         } else {
             HStack(spacing: 4) {
                 Image(systemName: "checklist")

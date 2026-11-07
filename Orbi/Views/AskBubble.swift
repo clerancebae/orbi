@@ -16,13 +16,27 @@ final class AskBubble {
     init(presenter: BubblePresenter, log agentLog: AgentLogStore) {
         self.presenter = presenter
         self.agentLog = agentLog
+        Self.removeOldAnswers()
+    }
+
+    /// Answers nobody picked up (the hook timed out or was killed) are removed after a day.
+    private static func removeOldAnswers() {
+        let fm = FileManager.default
+        let dir = SharedContainer.answersDirectory
+        let cutoff = Date.now.addingTimeInterval(-24 * 60 * 60)
+        for url in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? [] {
+            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let modified, modified < cutoff { try? fm.removeItem(at: url) }
+        }
     }
 
     private static func key(_ id: String) -> String { "ask-" + id }
 
     func show(_ ask: AgentAsk) {
         agentLog.add(AgentEvent(id: ask.id, date: .now, kind: ask.kind == .permission ? .permission : .finished,
-                                title: ask.title, subtitle: ask.message, detail: ask.detail))
+                                title: ask.title, subtitle: ask.message, detail: ask.detail, app: ask.context.app))
+        agentLog.askOpened(ask.id)
+        if ask.kind == .reply { agentLog.finishTurn(ask.context) }  // the turn is over; Orbi waits for you
         let key = Self.key(ask.id)
         let sound = ask.kind == .permission ? "Ping" : "Glass"
         presenter.show(key: key, sound: sound, interactive: true) { [weak self] close in
@@ -69,7 +83,7 @@ private struct AskView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             // ✕ means "not here": permission falls back to the terminal dialog, reply is dropped.
-            BubbleHeader(title: ask.title) {
+            BubbleHeader(title: ask.title, app: ask.context.app) {
                 answer(ask.kind == .permission ? .terminal : .dismiss, nil)
             }
             if let message = ask.message {

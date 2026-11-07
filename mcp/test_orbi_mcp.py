@@ -23,6 +23,9 @@ STATUS = {
     "read": [{"title": "Old post", "url": "https://example.com", "finishedAt": "2026-11-06T10:00:00Z"}],
     "agents": [{"date": "2026-11-07T09:58:00Z", "kind": "finished", "title": "Claude finished ✓",
                 "subtitle": "Orbi · 7 min", "detail": "Tests pass.\nPush?", "outcome": "replied", "reply": "push it"}],
+    "agentsRunning": [{"agent": "Claude", "project": "Orbi", "since": "2026-11-07T09:55:00Z"}],
+    "agentsToday": {"seconds": 7800, "turns": 14, "projects": ["Orbi", "api"], "allowed": 12, "denied": 1,
+                    "replies": 3},
     "updatedAt": "2026-11-07T10:00:00Z",
 }
 
@@ -80,6 +83,9 @@ class Tests(unittest.TestCase):
         self.assertIn("Swift 6 <https://swift.org>", text)
         self.assertIn("opened, not finished", text)
         self.assertIn("Old post", text)
+        self.assertIn("Agent working now: Claude · Orbi", text)
+        self.assertIn("Agents today: 2h 10m of agent work · 14 turns · projects: Orbi, api · "
+                      "12 approved, 1 denied from Orbi · 3 replies from Orbi", text)
         self.assertIn("Recent AI agent activity", text)
         self.assertIn("Claude finished ✓ · Orbi · 7 min · replied", text)
         self.assertIn("Tests pass. Push?", text)

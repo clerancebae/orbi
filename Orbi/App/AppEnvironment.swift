@@ -193,17 +193,22 @@ final class AppEnvironment {
             readingStore.save(url: url, title: title)
         case .readingOpenNext:
             readingStore.openNext()
-        case let .notify(title, message, sticky):
-            notifyBubble.show(title: title, message: message, sticky: sticky)
+        case let .notify(title, message, sticky, app):
+            notifyBubble.show(title: title, message: message, sticky: sticky, app: app)
         case .notifyDismiss:
             notifyBubble.dismissSticky()
         case let .ask(ask):
             askBubble.show(ask)
         case let .askCancel(id):
             askBubble.cancel(id: id)
-        case let .agentLog(title, subtitle, detail):
+        case let .agentLog(title, subtitle, detail, context):
             agentLog.add(AgentEvent(id: UUID().uuidString, date: .now, kind: .finished, title: title,
-                                    subtitle: subtitle, detail: detail))
+                                    subtitle: subtitle, detail: detail, app: context.app))
+            agentLog.finishTurn(context)
+        case let .agentStart(context):
+            agentLog.start(context)
+        case let .agentStop(session):
+            agentLog.stop(session: session)
         case .capture:
             Self.urlLog.info("orbi://capture arrives with the quick-capture panel (Phase 4)")
         }
@@ -253,6 +258,8 @@ final class AppEnvironment {
                       detail: $0.detail.map { String($0.prefix(300)) }, outcome: $0.outcome?.rawValue,
                       reply: $0.reply)
             },
+            agentsRunning: agentLog.running.map { .init(agent: $0.agent, project: $0.project, since: $0.startedAt) },
+            agentsToday: agentLog.today.turns > 0 ? agentLog.today : nil,
             updatedAt: now
         )
     }

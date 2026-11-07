@@ -139,3 +139,12 @@ User feedback: the most disruptive part of working with Claude Code is switching
 
 ### Agents list (activity history)
 Bubbles disappear, so what Claude said and what you approved was lost. `AgentLogStore` keeps a rolling log (newest first, last 100) in `agent-log.json` next to the SwiftData store: every `orbi://ask` (permission or reply) with its outcome (allowed / denied / terminal / replied / dismissed / elsewhere) and your reply, plus `orbi://agent/log?title&subtitle&detail`, which the hook sends for every finished turn that showed no reply bubble (short turns included). Plain JSON instead of a SwiftData model: it's a capped log, and this avoids a schema migration of the main store. The panel shows it as the first section ("Agents"); `status.json` carries the last 10 (detail cut to 300 chars) as `agents`, so `get_status` can answer "what did Claude do?". The first answer for an event wins, so the hook's cleanup cancel after a click doesn't overwrite it.
+
+### Running agents, "go to app", daily summary
+- **Running (🤖):** the hook sends `orbi://agent/start?session&agent&project&app` on every prompt; the turn ends with `agent/log` (or the reply `ask`), `agent/stop` (from `idle_prompt`, since `Stop` doesn't fire when a turn is interrupted), or after 3 h without news (closed terminal). Kept in memory only. The label shows `🤖`, `🤖N`, or `🔔🤖` while an ask bubble is open. Count only, no ticking minutes, so the label doesn't re-render every minute for agents.
+- **Go to app (↗):** the hook passes the host app's bundle id (`__CFBundleIdentifier`, else `TERM_PROGRAM` mapped to a bundle id); Orbi activates it with `NSRunningApplication`. App-level only: focusing a specific window or tab would need Automation permission for every terminal.
+- **Daily summary:** per-day totals (agent seconds, turns, projects, approved / denied / replies from Orbi) are stored in `agent-log.json` next to the events, for 30 days, so they aren't limited by the 100-event list. "Approved" counts only answers given in Orbi, not in the terminal.
+- **Optional agent fields are lenient:** an invalid `session` / `app` / `seconds` is dropped, not an error, so an old hook still gets its bubble.
+
+### Task clock pauses during sleep and screen lock (review fix)
+An active task left running overnight came back with ~14 h elapsed, since elapsed time is `now − startedAt`. On `willSleep` and `com.apple.screenIsLocked`, the elapsed time is banked into `spentSeconds` and `startedAt` cleared (the task stays active); on wake / unlock, `startedAt` restarts from now.

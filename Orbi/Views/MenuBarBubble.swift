@@ -134,15 +134,20 @@ private struct BubbleChrome<Content: View>: View {
     }
 }
 
-/// Header row shared by bubbles: title + ✕.
+/// Header row shared by bubbles: title, optional "go to app" (↗), and ✕.
 struct BubbleHeader: View {
     let title: String
+    /// Bundle id of the agent's terminal / IDE; shows a ↗ button that brings it forward.
+    var app: String? = nil
     let close: () -> Void
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title).font(.headline)
             Spacer()
+            if let app {
+                GoToAppButton(bundleID: app)
+            }
             Button(action: close) {
                 Image(systemName: "xmark").font(.caption.weight(.semibold))
             }
@@ -150,6 +155,20 @@ struct BubbleHeader: View {
             .foregroundStyle(.secondary)
             .help("Dismiss")
         }
+    }
+}
+
+/// ↗ button that brings an agent's terminal / IDE to the front.
+struct GoToAppButton: View {
+    let bundleID: String
+
+    var body: some View {
+        Button { AgentApps.activate(bundleID) } label: {
+            Image(systemName: "arrow.up.forward.app").font(.caption.weight(.semibold))
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.secondary)
+        .help("Go to \(AgentApps.name(bundleID) ?? "the agent")")
     }
 }
 

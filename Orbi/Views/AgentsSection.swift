@@ -21,8 +21,19 @@ struct AgentsSection: View {
                 }
             }
 
-            if store.events.isEmpty {
-                Text("Nothing yet. Claude's permission requests and finished turns show up here.")
+            if let summary = Self.summary(store.today) {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            ForEach(store.running) { agent in
+                RunningRow(agent: agent)
+            }
+
+            if store.events.isEmpty && store.running.isEmpty {
+                Text("Nothing yet. Running agents, permission requests and finished turns show up here.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -43,10 +54,45 @@ struct AgentsSection: View {
         }
     }
 
+    /// "Today: 2 h 10 min across 3 projects · 14 turns · 12 approved, 1 denied · 3 replies"
+    static func summary(_ s: AgentDayStats) -> String? {
+        guard s.turns > 0 || s.allowed + s.denied + s.replies > 0 else { return nil }
+        var parts: [String] = []
+        if s.seconds >= 60 {
+            let projects = s.projects.count > 1 ? " across \(s.projects.count) projects" : ""
+            parts.append("\(DurationText.minutes(DurationText.floorMinutes(s.seconds)))\(projects)")
+        }
+        if s.turns > 0 { parts.append(s.turns == 1 ? "1 turn" : "\(s.turns) turns") }
+        if s.allowed + s.denied > 0 {
+            parts.append(s.denied > 0 ? "\(s.allowed) approved, \(s.denied) denied" : "\(s.allowed) approved")
+        }
+        if s.replies > 0 { parts.append(s.replies == 1 ? "1 reply" : "\(s.replies) replies") }
+        return "Today: " + parts.joined(separator: " · ")
+    }
+
     private func rows(_ events: [AgentEvent]) -> some View {
         ForEach(events) { event in
             AgentEventRow(event: event, isExpanded: expanded.contains(event.id)) {
                 if expanded.contains(event.id) { expanded.remove(event.id) } else { expanded.insert(event.id) }
+            }
+        }
+    }
+}
+
+/// A session in the middle of a turn: "Claude · Orbi · working 4 min".
+private struct RunningRow: View {
+    let agent: RunningAgent
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            ProgressView().controlSize(.mini).frame(width: 16)
+            Text([agent.agent, agent.project].compactMap { $0 }.joined(separator: " · "))
+                .font(.callout).lineLimit(1)
+            Text("working \(agent.startedAt, style: .relative)")
+                .font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
+            Spacer(minLength: 4)
+            if let app = agent.app {
+                GoToAppButton(bundleID: app)
             }
         }
     }
@@ -73,6 +119,9 @@ private struct AgentEventRow: View {
                         Text(badge.text)
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(badge.color)
+                    }
+                    if let app = event.app {
+                        GoToAppButton(bundleID: app)
                     }
                 }
                 .contentShape(Rectangle())

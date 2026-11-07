@@ -23,7 +23,11 @@ class Tests(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def env(self, **extra):
-        return dict(os.environ, TMPDIR=self.tmp, ORBI_ANSWERS_DIR=self.answers, ORBI_HOOK_DRY_RUN="1", **extra)
+        base = dict(os.environ, TMPDIR=self.tmp, ORBI_ANSWERS_DIR=self.answers, ORBI_HOOK_DRY_RUN="1")
+        base.pop("__CFBundleIdentifier", None)  # no host app unless a test sets one
+        base.pop("TERM_PROGRAM", None)
+        base.update(extra)
+        return base
 
     def run_hook(self, agent, event, data, *flags, **env):
         p = subprocess.run([sys.executable, "-I", HOOK, agent, event] + list(flags), input=json.dumps(data),
@@ -48,6 +52,8 @@ class Tests(unittest.TestCase):
     def wait_for_ask(self, proc):
         """Reads the ask URL the waiting hook printed; returns its query."""
         line = proc.stderr.readline().strip()
+        while line.startswith("orbi://agent/"):
+            line = proc.stderr.readline().strip()
         self.assertTrue(line.startswith("orbi://ask?"), line)
         return {k: v[0] for k, v in parse_qs(urlparse(line).query).items()}
 
@@ -63,17 +69,33 @@ class Tests(unittest.TestCase):
     # ---------------------------------------------------------------- finished
 
     def test_short_turn_is_quiet_long_turn_notifies(self):
-        self.assertEqual(self.run_hook("claude", "prompt", S1), (0, "{}", []))
-        self.assertEqual(self.run_hook("claude", "stop", S1, "--reply"), (0, "{}", []))
+        self.assertEqual(self.run_hook("claude", "prompt", S1),
+                         (0, "{}", ["orbi://agent/start?session=claude-s1&agent=Claude&project=Orbi"]))
+        code, out, urls = self.run_hook("claude", "stop", S1, "--reply")
+        self.assertEqual(len(urls), 1)  # no bubble, just the log entry that ends "running"
+        self.assertTrue(urls[0].startswith("orbi://agent/log?title=Claude%20finished"))
+        self.assertIn("session=claude-s1", urls[0])
         self.run_hook("gemini", "prompt", S1)
         code, out, urls = self.run_hook("gemini", "stop", dict(S1, prompt_response="All done."),
                                         ORBI_AGENT_MIN_SECONDS="0")
         self.assertEqual(urls[0], "orbi://notify?title=Gemini%20finished%20%E2%9C%93&message=Orbi%20%C2%B7%201%20s")
         self.assertEqual(urls[1], "orbi://agent/log?title=Gemini%20finished%20%E2%9C%93"
-                                  "&subtitle=Orbi%20%C2%B7%201%20s&detail=All%20done.")
+                                  "&subtitle=Orbi%20%C2%B7%201%20s&detail=All%20done."
+                                  "&session=gemini-s1&agent=Gemini&project=Orbi&seconds=0")
+
+    def test_host_app_and_idle(self):
+        code, out, urls = self.run_hook("claude", "prompt", S1, __CFBundleIdentifier="com.microsoft.VSCode")
+        self.assertIn("app=com.microsoft.VSCode", urls[0])
+        code, out, urls = self.run_hook("claude", "prompt", S1, TERM_PROGRAM="iTerm.app")
+        self.assertIn("app=com.googlecode.iterm2", urls[0])
+        code, out, urls = self.run_hook("claude", "prompt", S1, __CFBundleIdentifier="bad id; rm")
+        self.assertNotIn("app=", urls[0])
+        # Idle a minute after an interrupted turn → no longer running.
+        code, out, urls = self.run_hook("claude", "wait", dict(S1, notification_type="idle_prompt"))
+        self.assertEqual(urls, ["orbi://agent/stop?session=claude-s1"])
 
     def test_short_turn_with_message_is_logged_silently(self):
-        self.run_hook("claude", "prompt", S1)
+        self.run_hook("claude", "prompt", S1)  # (agent/start)
         code, out, urls = self.run_hook("claude", "stop", dict(S1, last_assistant_message="Fixed it."), "--reply")
         self.assertEqual(len(urls), 1)
         self.assertTrue(urls[0].startswith("orbi://agent/log?title=Claude%20finished"))
@@ -107,6 +129,7 @@ class Tests(unittest.TestCase):
         q = self.wait_for_ask(p)
         code, out, urls = self.run_hook("claude", "prompt", S1)
         self.assertIn("orbi://ask/cancel?id=" + q["id"], urls)
+        self.assertIn("orbi://agent/start?session=claude-s1&agent=Claude&project=Orbi", urls)
         self.finish(p)
         self.assertEqual(p.returncode, 0)
 
@@ -164,8 +187,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.run_hook("claude", "resume", S1)[2], [])
 
     def test_ignored_notifications_and_switch_off(self):
-        for kind in ["idle_prompt", "auth_success"]:
-            self.assertEqual(self.run_hook("claude", "wait", dict(S1, notification_type=kind))[2], [])
+        self.assertEqual(self.run_hook("claude", "wait", dict(S1, notification_type="auth_success"))[2], [])
         self.assertEqual(self.run_hook("claude", "wait", dict(S1, notification_type="permission_prompt"),
                                        ORBI_AGENT_WAIT="0")[2], [])
         urls = self.run_hook("gemini", "wait", dict(S1, notification_type="ToolPermission"))[2]
