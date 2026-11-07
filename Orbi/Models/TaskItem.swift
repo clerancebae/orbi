@@ -20,6 +20,9 @@ final class TaskItem {
     var createdAt: Date
     /// Time spent in earlier active stints (pausing banks time here). See DECISIONS.md.
     var spentSeconds: Int = 0
+    /// Agent project (folder name) this task belongs to: an agent starting a turn there starts
+    /// the task if nothing else is running. Optional, so existing stores migrate on their own.
+    var project: String?
 
     init(
         id: UUID = UUID(),

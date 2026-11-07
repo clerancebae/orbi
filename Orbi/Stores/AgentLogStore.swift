@@ -49,6 +49,31 @@ struct AgentDayStats: Codable, Equatable, Sendable {
     var replies = 0
     /// Optional so logs written before token counting still decode.
     var tokens: Int?
+    /// Agent seconds per project, for tasks linked to a project. Optional for older logs.
+    var projectSeconds: [String: Int]?
+
+    /// Adds another day's totals (for the week).
+    mutating func add(_ other: AgentDayStats) {
+        seconds += other.seconds
+        turns += other.turns
+        for project in other.projects where !projects.contains(project) { projects.append(project) }
+        allowed += other.allowed
+        denied += other.denied
+        replies += other.replies
+        if let t = other.tokens { tokens = (tokens ?? 0) + t }
+        if let more = other.projectSeconds {
+            var mine = projectSeconds ?? [:]
+            for (project, s) in more { mine[project, default: 0] += s }
+            projectSeconds = mine
+        }
+    }
+}
+
+/// A plan limit that just crossed a warning level ("Claude 5-hour limit: 80% used").
+struct LimitWarning: Equatable, Sendable {
+    let window: String
+    let percent: Int
+    let reset: Date?
 }
 
 /// What AI agents did and are doing. Events: newest first, last 100. Day stats: last 30 days.
@@ -73,21 +98,29 @@ final class AgentLogStore {
     private(set) var finishedUnseen: Set<String> = []
     /// Latest Claude plan limits (from the status line hook); nil until one arrives.
     private(set) var limits: UsageLimits?
+    /// Messages you queued for a running session, keyed by session. Each is also a file
+    /// `queue/<session>.txt` that the hook sends as the next prompt when the turn ends.
+    private(set) var queued: [String: String] = [:]
 
     /// Agents waiting on you: open questions plus finished turns you haven't seen.
     var waitingForYou: Int { openAsks.count + finishedUnseen.count }
 
     @ObservationIgnored private let fileURL: URL?
+    @ObservationIgnored private let queueDirectory: URL?
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let calendar: Calendar
     @ObservationIgnored private let log = Logger(subsystem: "com.berke.Orbi", category: "AgentLog")
 
     /// - Parameter fileURL: nil keeps everything in memory only (tests, demo mode).
-    init(fileURL: URL?, now: @escaping () -> Date = Date.init, calendar: Calendar = .current) {
+    /// - Parameter queueDirectory: where queued messages go for the hook; nil = memory only.
+    init(fileURL: URL?, queueDirectory: URL? = nil, now: @escaping () -> Date = Date.init,
+         calendar: Calendar = .current) {
         self.fileURL = fileURL
+        self.queueDirectory = queueDirectory
         self.now = now
         self.calendar = calendar
         load()
+        loadQueue()
     }
 
     // MARK: - Events
@@ -150,9 +183,85 @@ final class AgentLogStore {
             stats.turns += 1
             stats.seconds += context.seconds ?? 0
             if let tokens = context.tokens, tokens > 0 { stats.tokens = (stats.tokens ?? 0) + tokens }
-            if let project = context.project, !stats.projects.contains(project) { stats.projects.append(project) }
+            if let project = context.project {
+                if !stats.projects.contains(project) { stats.projects.append(project) }
+                if let seconds = context.seconds, seconds > 0 {
+                    stats.projectSeconds = stats.projectSeconds ?? [:]
+                    stats.projectSeconds?[project, default: 0] += seconds
+                }
+            }
         }
         save()
+    }
+
+    // MARK: - Queued messages
+
+    /// Only Claude can be handed a message when its turn ends (see `agent_hook.py`).
+    static func canQueue(session: String) -> Bool { session.hasPrefix("claude-") }
+
+    /// Queues `text` as the session's next prompt (replaces an earlier one).
+    func queue(_ text: String, session: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, URLRouter.isValidSession(session) else { return }
+        queued[session] = trimmed
+        guard let url = queueFile(session) else { return }
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(trimmed.utf8).write(to: url, options: .atomic)
+        } catch {
+            log.error("Queueing for \(session, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func unqueue(session: String) {
+        queued.removeValue(forKey: session)
+        if let url = queueFile(session) { try? FileManager.default.removeItem(at: url) }
+    }
+
+    /// The hook sent a queued message: the turn ended, and the next one starts right away.
+    func queuedSent(_ context: AgentContext) {
+        guard let session = context.session else { return }
+        queued.removeValue(forKey: session)
+        updateToday { $0.replies += 1 }
+        start(context)
+        save()
+    }
+
+    private func queueFile(_ session: String) -> URL? {
+        queueDirectory?.appending(path: session + ".txt")
+    }
+
+    /// Queued messages still waiting from before a relaunch.
+    private func loadQueue() {
+        guard let queueDirectory,
+              let urls = try? FileManager.default.contentsOfDirectory(at: queueDirectory, includingPropertiesForKeys: nil)
+        else { return }
+        for url in urls where url.pathExtension == "txt" {
+            let session = url.deletingPathExtension().lastPathComponent
+            if let text = try? String(contentsOf: url, encoding: .utf8), !text.isEmpty { queued[session] = text }
+        }
+    }
+
+    // MARK: - Plan limit warnings
+
+    nonisolated static let warnAt = [80, 95]
+
+    /// Warning levels the new report crossed upward (at most one per window: the highest).
+    /// A different reset time means a new window, which starts from 0 %.
+    nonisolated static func limitWarnings(old: UsageLimits?, new: UsageLimits) -> [LimitWarning] {
+        func check(_ name: String, _ oldUsed: Int?, _ oldReset: Date?, _ newUsed: Int?, _ newReset: Date?) -> LimitWarning? {
+            guard let newUsed else { return nil }
+            let sameWindow: Bool = switch (oldReset, newReset) {
+            case let (a?, b?): abs(a.timeIntervalSince(b)) < 120
+            case (nil, nil): true
+            default: false
+            }
+            let before = sameWindow ? (oldUsed ?? 0) : 0
+            guard let level = warnAt.last(where: { before < $0 && $0 <= newUsed }) else { return nil }
+            return LimitWarning(window: name, percent: level, reset: newReset)
+        }
+        return [check("5-hour", old?.fiveHour, old?.fiveHourReset, new.fiveHour, new.fiveHourReset),
+                check("weekly", old?.week, old?.weekReset, new.week, new.weekReset)].compactMap { $0 }
     }
 
     func setLimits(_ new: UsageLimits) {
@@ -174,6 +283,21 @@ final class AgentLogStore {
     // MARK: - Day stats
 
     var today: AgentDayStats { days[dayKey(now())] ?? AgentDayStats() }
+
+    /// Totals of every day from `start` (any time that day) through today.
+    func stats(since start: Date) -> AgentDayStats {
+        let first = dayKey(start)
+        var total = AgentDayStats()
+        for (key, day) in days where key >= first { total.add(day) }
+        return total
+    }
+
+    /// Projects agents worked in (last 30 days and right now), for linking tasks. Sorted.
+    var knownProjects: [String] {
+        var all = Set(days.values.flatMap(\.projects))
+        for agent in running { if let p = agent.project { all.insert(p) } }
+        return all.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
 
     private func updateToday(_ change: (inout AgentDayStats) -> Void) {
         let key = dayKey(now())

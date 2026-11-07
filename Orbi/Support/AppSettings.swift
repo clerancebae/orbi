@@ -35,6 +35,9 @@ final class AppSettings {
         static let showWater = "showWater"
         static let showReading = "showReading"
         static let agentReplies = "agentReplies"
+        static let focusMode = "focusMode"
+        static let bubbleHotkeys = "bubbleHotkeys"
+        static let limitWarnings = "limitWarnings"
     }
 
     @ObservationIgnored private let defaults: UserDefaults
@@ -70,6 +73,16 @@ final class AppSettings {
     }
     @ObservationIgnored var onAgentRepliesChange: (() -> Void)?
 
+    /// Focus: while a task runs, water and read-later reminders wait until it's paused or done.
+    /// Agent bubbles still show.
+    var focusMode: Bool { didSet { defaults.set(focusMode, forKey: Key.focusMode); onFocusModeChange?() } }
+    @ObservationIgnored var onFocusModeChange: (() -> Void)?
+    /// ⌥⌘Y / ⌥⌘N / ⌥⌘R answer agent bubbles from any app while one is open.
+    var bubbleHotkeys: Bool { didSet { defaults.set(bubbleHotkeys, forKey: Key.bubbleHotkeys); onBubbleHotkeysChange?() } }
+    @ObservationIgnored var onBubbleHotkeysChange: (() -> Void)?
+    /// A bubble when a Claude plan limit passes 80 % or 95 %.
+    var limitWarnings: Bool { didSet { defaults.set(limitWarnings, forKey: Key.limitWarnings) } }
+
     /// Day ("YYYY-MM-DD") the reading nudge last ran. Not observed; only the scheduler uses it.
     var lastReadingNudgeDay: String? {
         get { defaults.string(forKey: Key.lastReadingNudgeDay) }
@@ -91,6 +104,9 @@ final class AppSettings {
             Key.showWater: true,
             Key.showReading: true,
             Key.agentReplies: true,
+            Key.focusMode: false,
+            Key.bubbleHotkeys: true,
+            Key.limitWarnings: true,
         ])
         self.defaults = defaults
         waterGoal = defaults.integer(forKey: Key.waterGoal)
@@ -105,6 +121,9 @@ final class AppSettings {
         showWater = defaults.bool(forKey: Key.showWater)
         showReading = defaults.bool(forKey: Key.showReading)
         agentReplies = defaults.bool(forKey: Key.agentReplies)
+        focusMode = defaults.bool(forKey: Key.focusMode)
+        bubbleHotkeys = defaults.bool(forKey: Key.bubbleHotkeys)
+        limitWarnings = defaults.bool(forKey: Key.limitWarnings)
     }
 
     var readingNudgeConfig: ReadingNudgeScheduler.Config {

@@ -33,6 +33,10 @@ final class ReminderScheduler {
     @ObservationIgnored private weak var meetings: (any MeetingProviding)?
     @ObservationIgnored private weak var notifier: (any WaterReminderPosting)?
     @ObservationIgnored private let armOverride: ((Date?) -> Void)?
+    /// Focus mode: a reminder due now waits until this turns false (`quietEnded()`).
+    @ObservationIgnored private let quiet: () -> Bool
+    /// A reminder came due during focus and is owed once it ends.
+    @ObservationIgnored private(set) var owedAfterQuiet = false
     @ObservationIgnored private let timer = OneShotTimer(tolerance: 15)
     /// Start of the current countdown (last glass of water, or last reminder shown).
     @ObservationIgnored private var anchor: Date
@@ -49,7 +53,9 @@ final class ReminderScheduler {
          lastWater: Date?,
          meetings: (any MeetingProviding)?,
          notifier: (any WaterReminderPosting)?,
+         quiet: @escaping () -> Bool = { false },
          armTimer: ((Date?) -> Void)? = nil) {
+        self.quiet = quiet
         self.settings = settings
         self.now = now
         self.calendar = calendar
@@ -70,6 +76,7 @@ final class ReminderScheduler {
     func start() { rearm() }
 
     func waterLogged() {
+        owedAfterQuiet = false
         anchor = now()
         overrideDue = nil
         isDue = false
@@ -120,9 +127,25 @@ final class ReminderScheduler {
             return
         }
 
+        if quiet() {
+            // Focus: no bubble now; one is owed when the task stops. Count down from here meanwhile.
+            owedAfterQuiet = true
+            anchor = current
+            rearm()
+            return
+        }
+
         notifier?.postWaterReminder()
         isDue = true
         anchor = current
+        rearm()
+    }
+
+    /// Focus ended (task paused / done, or focus turned off): show a reminder owed during it.
+    func quietEnded() {
+        guard owedAfterQuiet else { return }
+        owedAfterQuiet = false
+        overrideDue = now()
         rearm()
     }
 

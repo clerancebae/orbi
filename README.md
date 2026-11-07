@@ -46,6 +46,10 @@ Working with agents means a lot of waiting and a lot of window switching. You st
 - **Reply from the menu bar, in any terminal.** When a long turn ends, the bubble shows what Claude said. Type your next instruction right there (or hit **Continue**) and Claude picks it up. It works with Terminal, iTerm2, VS Code, Cursor and more, no tmux needed, because it uses Claude Code's own hooks.
 - **The orbit is the status.** Orbi's menu bar icon is a little orbit: **dashed** while an agent works, **blue** when it's your turn (Claude finished or asks you something), faint otherwise. Blue stays until you answer, start the next prompt or open Orbi, so you never miss a finished turn. Colour-blind safe: shape plus one colour.
 - **Jump back in one click.** Every bubble and Agents row has a ↗ button that brings the agent's terminal or IDE to the front (Terminal, iTerm2, VS Code, Cursor, Ghostty, …).
+- **Queue the next message.** While Claude works, type your next instruction on its row in the panel. It's sent the moment the turn ends, so you don't have to wait for it.
+- **Keyboard shortcuts.** While a bubble is open: **⌥⌘Y** allows, **⌥⌘N** denies, **⌥⌘R** jumps into the reply field. They work from any app, and the keys are only taken while a bubble is open.
+- **Plan limit warnings.** A bubble when your Claude 5-hour or weekly limit passes 80% and 95%, with the reset time.
+- **Codex and OpenCode.** One-click connect for running and finished turns, next to Claude Code and Gemini CLI.
 - **Daily summary.** "Today: 2h 10m across 3 projects · 14 turns · 12 approved · 3 replies", at the top of the Agents list and in `get_status`.
 - **See what your agent did.** The **Agents** list at the top of Orbi's panel keeps every finished turn (with Claude's last message), every permission request (with your answer) and your replies. Click a row to read it in full, or ask your agent "what did you do today?" over MCP.
 - **"Agent finished" bubble.** A small bubble under the menu bar icon when Claude Code, Gemini CLI or Codex finishes a turn longer than a minute: *"Claude finished ✓ · my-project · 7 min"*. Short replies stay quiet.
@@ -54,7 +58,9 @@ Working with agents means a lot of waiting and a lot of window switching. You st
 - **Zero-setup server.** One Python file, standard library only, runs on the macOS system Python. It starts only when the agent needs it.
 
 ### For you, while the agent works
-- **Tasks with a timer.** One active task with a countdown in the menu bar. The clock pauses while the Mac sleeps or the screen is locked. Type `Write report 25m` to set an estimate. Tasks can be planned for later days.
+- **Tasks with a timer.** One active task with a countdown in the menu bar. The clock pauses while the Mac sleeps or the screen is locked. Type `Write report 25m` to set an estimate. Tasks can be planned for later days. Add `#api` to link a task to a project: when an agent starts working in that folder and nothing else is running, the task starts by itself.
+- **Focus.** Optional: while a task runs, water and read-later reminders wait until it's paused or done. Agent bubbles still come through.
+- **This week.** "This week: 9h agents · 23 tasks · 6 read · 31 glasses" at the bottom of the panel and in `get_status`.
 - **Water and breaks.** Quiet reminders toward a daily goal. They skip calendar meetings.
 - **Read later.** Save a link, close the tab, and get one gentle nudge a day to actually read it. Finished items are kept, so you can look back at what you read.
 - **Scriptable.** Everything is reachable through `orbi://` URLs (Shortcuts, shell scripts, CI). The current state is written to a `status.json` file.

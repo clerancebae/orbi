@@ -141,6 +141,10 @@ def summarize(s):
             extra.append("est %s" % minutes_text(t["estimateMin"]))
         if t.get("spentMin"):
             extra.append("spent %s" % minutes_text(t["spentMin"]))
+        if t.get("project"):
+            extra.append("project %s" % t["project"])
+        if t.get("agentMin"):
+            extra.append("agent worked %s on it today" % minutes_text(t["agentMin"]))
         lines.append("  %s %s%s" % (mark, t.get("title", ""), (" (" + ", ".join(extra) + ")") if extra else ""))
 
     upcoming = s.get("upcoming") or []
@@ -202,6 +206,17 @@ def summarize(s):
                 parts.append("%d replies from Orbi" % today["replies"])
             lines.append("Agents today: " + " · ".join(parts))
 
+    week = s.get("week")
+    if week:
+        parts = []
+        if week.get("agentSeconds", 0) >= 60:
+            parts.append("%s of agent work (%d turns)" % (minutes_text(week["agentSeconds"] // 60), week.get("agentTurns", 0)))
+        parts.append("%d tasks done" % week.get("tasksDone", 0))
+        parts.append("%d read" % week.get("read", 0))
+        parts.append("%d glasses of water" % week.get("water", 0))
+        lines.append("")
+        lines.append("This week (since %s): %s" % (week.get("since", "?"), ", ".join(parts)))
+
     agents = s.get("agents") or []
     if agents:
         lines.append("")
@@ -244,7 +259,8 @@ def validate_task(t):
         if not 1 <= minutes <= 1440:
             raise ToolError("minutes must be between 1 and 1440.")
     date = (t.get("date") or "").strip().lower() or None
-    return title, minutes, date
+    project = (t.get("project") or "").strip()[:120] or None
+    return title, minutes, date, project
 
 
 def tool_add_tasks(args):
@@ -254,7 +270,8 @@ def tool_add_tasks(args):
     if len(tasks) > 30:
         raise ToolError("At most 30 tasks at once.")
     validated = [validate_task(t if isinstance(t, dict) else {}) for t in tasks]
-    urls = [orbi_url("task/add", title=title, min=minutes, date=date) for title, minutes, date in validated]
+    urls = [orbi_url("task/add", title=title, min=minutes, date=date, project=project)
+            for title, minutes, date, project in validated]
     status = None
     for url in urls:
         status = open_url(url)
@@ -262,7 +279,7 @@ def tool_add_tasks(args):
         return "Dry run, would open:\n" + "\n".join(urls)
     added = ", ".join(
         "%s%s%s" % (title, (" (%s)" % minutes_text(minutes)) if minutes else "", (" for %s" % date) if date else "")
-        for title, minutes, date in validated)
+        for title, minutes, date, _ in validated)
     return "Added: %s\n\n%s" % (added, summarize(status) if status else "")
 
 
@@ -309,6 +326,9 @@ TASK_ITEM_SCHEMA = {
                     "description": "Optional time estimate in minutes."},
         "date": {"type": "string",
                  "description": "Optional day: 'today' (default), 'tomorrow', or YYYY-MM-DD. Past dates become today."},
+        "project": {"type": "string",
+                    "description": "Optional project folder name (e.g. 'api'). When an AI agent starts working in a "
+                                   "folder with this name and no task is running, Orbi starts this task's timer."},
     },
     "required": ["title"],
     "additionalProperties": False,
@@ -319,7 +339,7 @@ TOOLS = [
         "name": "get_status",
         "description": "Read the user's Orbi state: today's tasks (with estimates and time spent), the active "
                        "task and its remaining time, tasks planned for later days, water intake vs goal, next "
-                       "calendar event, read-later list and recently read items. Read-only.",
+                       "calendar event, read-later list, recently read items, AI agent activity and this week's totals. Read-only.",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
         "annotations": {"readOnlyHint": True, "title": "Get Orbi status"},
         "handler": tool_get_status,

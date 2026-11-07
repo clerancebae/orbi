@@ -32,6 +32,9 @@ final class TaskStore {
     @ObservationIgnored var onEndingSoon: ((TaskItem) -> Void)?
     /// Called once when the active task's estimate runs out (suggest a break).
     @ObservationIgnored var onTimeUp: ((TaskItem) -> Void)?
+    /// Called when a task starts running (true) or nothing runs any more (false). Focus mode uses it.
+    @ObservationIgnored var onActiveChange: ((Bool) -> Void)?
+    @ObservationIgnored private var wasActive = false
     /// Remaining seconds at the previous check; a prompt fires only on a downward crossing.
     @ObservationIgnored private var lastRemaining: Int?
 
@@ -129,7 +132,7 @@ final class TaskStore {
 
     /// Adds a task for today, or for `day` (any date in that day) if given.
     @discardableResult
-    func add(title: String, estimatedMinutes: Int? = nil, on day: Date? = nil) -> TaskItem? {
+    func add(title: String, estimatedMinutes: Int? = nil, on day: Date? = nil, project: String? = nil) -> TaskItem? {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         refreshIfDayChanged()
@@ -140,6 +143,7 @@ final class TaskStore {
         if planned == today {
             let task = TaskItem(title: trimmed, estimatedMinutes: estimate, plannedDate: today,
                                 sortIndex: nextSortIndex(), createdAt: currentDate)
+            task.project = Self.cleanProject(project)
             context.insert(task)
             tasks.append(task)
             save()
@@ -149,6 +153,7 @@ final class TaskStore {
         let sameDay = upcoming.filter { $0.plannedDate == planned }
         let task = TaskItem(title: trimmed, estimatedMinutes: estimate, plannedDate: planned,
                             sortIndex: (sameDay.map(\.sortIndex).max() ?? -1) + 1, createdAt: currentDate)
+        task.project = Self.cleanProject(project)
         context.insert(task)
         save()
         refresh()
@@ -159,7 +164,42 @@ final class TaskStore {
     @discardableResult
     func add(input: String) -> TaskItem? {
         guard let parsed = TaskInputParser.parse(input) else { return nil }
-        return add(title: parsed.title, estimatedMinutes: parsed.estimatedMinutes)
+        return add(title: parsed.title, estimatedMinutes: parsed.estimatedMinutes, project: parsed.project)
+    }
+
+    /// Links a task to an agent project (nil unlinks).
+    func setProject(_ task: TaskItem, _ project: String?) {
+        task.project = Self.cleanProject(project)
+        save()
+    }
+
+    /// An agent started a turn in `project`: if nothing is running, start today's first open
+    /// task linked to it. Returns the task it started.
+    @discardableResult
+    func startLinked(project: String) -> TaskItem? {
+        refreshIfDayChanged()
+        guard activeTask == nil,
+              let task = openTasks.first(where: { $0.status == .todo && Self.sameProject($0.project, project) })
+        else { return nil }
+        start(task)
+        return task
+    }
+
+    /// Project names compare like folder names on macOS: case-insensitive.
+    static func sameProject(_ a: String?, _ b: String?) -> Bool {
+        guard let a, let b else { return false }
+        return a.caseInsensitiveCompare(b) == .orderedSame
+    }
+
+    private static func cleanProject(_ project: String?) -> String? {
+        project?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty.map { String($0.prefix(120)) }
+    }
+
+    /// Tasks completed since `start` (any day), for the weekly summary.
+    func doneCount(since start: Date) -> Int {
+        let past = Date.distantPast
+        let descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate { ($0.completedAt ?? past) >= start })
+        return (try? context.fetchCount(descriptor)) ?? 0
     }
 
     /// Makes `task` the active one; any other active task is paused back to `.todo`.
@@ -309,6 +349,11 @@ final class TaskStore {
             lastError = nil
         } catch {
             report(error, "Saving tasks")
+        }
+        let isActive = activeTask != nil
+        if isActive != wasActive {
+            wasActive = isActive
+            onActiveChange?(isActive)
         }
     }
 

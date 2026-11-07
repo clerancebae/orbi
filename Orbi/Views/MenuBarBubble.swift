@@ -42,11 +42,33 @@ final class BubblePresenter {
         if let sound { NSSound(named: sound)?.play() }
     }
 
+    /// App that was in front before `focus`, and the bubble it was for: closing that bubble
+    /// hands the keyboard back to it.
+    private var returnTo: (key: String, bundleID: String)?
+
+    /// Gives the bubble the keyboard, e.g. to type a reply after a global shortcut. A key
+    /// non-activating panel of an inactive app still doesn't get keystrokes (they go to the
+    /// app in front; found in testing), so Orbi activates for the moment and gives the
+    /// keyboard back when the bubble closes.
+    func focus(_ key: String) {
+        guard let panel = entries.first(where: { $0.key == key })?.panel else { return }
+        if let front = NSWorkspace.shared.frontmostApplication,
+           front.processIdentifier != ProcessInfo.processInfo.processIdentifier, let id = front.bundleIdentifier {
+            returnTo = (key, id)
+        }
+        NSApp.activate()  // allowed: the hotkey press is the user's latest input, sent to Orbi
+        panel.makeKeyAndOrderFront(nil)
+    }
+
     func close(_ key: String, animated: Bool = true) {
         guard let index = entries.firstIndex(where: { $0.key == key }) else { return }
         let panel = entries.remove(at: index).panel
         panel.orderOut(nil)
         layout(appearing: nil)
+        if let back = returnTo, back.key == key {
+            returnTo = nil
+            AgentApps.activate(back.bundleID)
+        }
     }
 
     // MARK: - Layout

@@ -64,21 +64,26 @@ final class AppEnvironment {
         endingSoonBubble = EndingSoonBubbleController(store: taskStore, presenter: bubbles)
 
         let settings = self.settings
+        let tasks = taskStore
+        // Focus mode: water and read-later reminders wait while a task runs.
+        let quiet: () -> Bool = { settings.focusMode && tasks.activeTask != nil }
         waterStore = WaterStore(context: modelContainer.mainContext, glassSize: { settings.glassSizeMl })
         waterBubble = WaterReminderBubble(presenter: bubbles, water: waterStore, settings: settings)
         reminders = ReminderScheduler(
             settings: { settings.reminderSettings },
             lastWater: waterStore.lastLogDate,
             meetings: calendar,
-            notifier: waterBubble
+            notifier: waterBubble,
+            quiet: quiet
         )
         waterBubble.reminders = reminders
 
         readingStore = ReadingStore(context: modelContainer.mainContext)
         readingNudgeBubble = ReadingNudgeBubble(presenter: bubbles, store: readingStore)
         notifyBubble = NotifyBubble(presenter: bubbles)
-        agentLog = AgentLogStore(fileURL: demoBubble ? nil : SharedContainer.agentLogURL)
-        askBubble = AskBubble(presenter: bubbles, log: agentLog)
+        agentLog = AgentLogStore(fileURL: demoBubble ? nil : SharedContainer.agentLogURL,
+                                 queueDirectory: demoBubble ? nil : SharedContainer.queueDirectory)
+        askBubble = AskBubble(presenter: bubbles, log: agentLog, hotkeysEnabled: { settings.bubbleHotkeys })
         agentConnections = AgentConnections(replies: { settings.agentReplies })
         // Only the installed copy repairs hook paths, so a debug build never redirects them.
         if !demoBubble, Bundle.main.bundlePath.hasPrefix("/Applications/") {
@@ -90,7 +95,8 @@ final class AppEnvironment {
             summary: { readingStore.pendingSummary() },
             post: { readingNudgeBubble.show($0) },
             lastCheckedDay: { settings.lastReadingNudgeDay },
-            setLastCheckedDay: { settings.lastReadingNudgeDay = $0 }
+            setLastCheckedDay: { settings.lastReadingNudgeDay = $0 },
+            quiet: quiet
         )
 
         statusExporter = demoBubble ? nil : StatusExporter(fileURL: SharedContainer.statusFileURL) {
@@ -144,6 +150,15 @@ final class AppEnvironment {
         reminders.start()
         settings.onReadingNudgeChange = { [weak readingNudge] in readingNudge?.rearm() }
         settings.onAgentRepliesChange = { [weak agentConnections] in agentConnections?.reconnectConnected() }
+        settings.onBubbleHotkeysChange = { [weak askBubble] in askBubble?.updateHotkeys() }
+        // Focus ends when no task runs any more, or when focus mode is turned off.
+        let readingNudge = self.readingNudge
+        let quietEnded = { [weak reminders, weak readingNudge] in
+            reminders?.quietEnded()
+            readingNudge?.quietEnded()
+        }
+        taskStore.onActiveChange = { active in if !active { quietEnded() } }
+        settings.onFocusModeChange = { [weak settings] in if settings?.focusMode == false { quietEnded() } }
         readingNudge.rearm()
         statusExporter?.start()
 

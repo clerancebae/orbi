@@ -9,6 +9,9 @@ struct StatusSnapshot: Codable, Equatable, Sendable {
         var status: String
         var estimateMin: Int?
         var spentMin: Int
+        var project: String? = nil
+        /// Agent minutes today in the task's project.
+        var agentMin: Int? = nil
     }
     struct Upcoming: Codable, Equatable, Sendable {
         var title: String
@@ -60,6 +63,7 @@ struct StatusSnapshot: Codable, Equatable, Sendable {
     /// Sessions in the middle of a turn.
     var agentsRunning: [Running] = []
     var agentsToday: AgentDayStats?
+    var week: WeekSummary?
 
     struct Running: Codable, Equatable, Sendable {
         var agent: String

@@ -25,6 +25,8 @@ Works with any agent whose hooks send JSON on stdin (session_id, cwd):
 - stop also counts the turn's tokens from the transcript (Claude: input + cache writes + output; Gemini:
   input − cached + output + thoughts; cache reads left out, they'd dwarf the rest) for the bubble and
   Orbi's day total.
+- stop (Claude): a message queued in Orbi while the turn ran (queue/<session>.txt) is sent as the next
+  prompt right away (exit 2 with --reply, else a blocking Stop decision) and logged as a reply.
 - statusline: prints "5h 23% · 7d 41%" for Claude's status line and sends the plan limits (rate_limits,
   Claude.ai plans only) to Orbi as `orbi://usage`, only when a rounded value changes.
 - The host app (`__CFBundleIdentifier` / `TERM_PROGRAM`) is passed along, so Orbi's ↗ brings it forward.
@@ -34,7 +36,7 @@ Works with any agent whose hooks send JSON on stdin (session_id, cwd):
 Answers come back from Orbi as ~/Library/Application Support/Orbi/answers/<id>.json.
 Never breaks the agent: on any error it exits 0 with "{}" on stdout (Gemini parses stdout as JSON).
 Env: ORBI_AGENT_MIN_SECONDS, ORBI_AGENT_WAIT=0 (no "needs you"), ORBI_ASK_TIMEOUT (permission, s, 590),
-     ORBI_REPLY_TIMEOUT (s, 3500), ORBI_ANSWERS_DIR, ORBI_HOOK_DRY_RUN=1 (print URLs to stderr; tests).
+     ORBI_REPLY_TIMEOUT (s, 3500), ORBI_ANSWERS_DIR, ORBI_QUEUE_DIR, ORBI_HOOK_DRY_RUN=1 (print URLs to stderr; tests).
 """
 import json
 import os
@@ -54,8 +56,11 @@ DRY_RUN = os.environ.get("ORBI_HOOK_DRY_RUN") == "1"
 STATE_DIR = os.path.join(tempfile.gettempdir(), "orbi-agent-hook")
 ANSWERS_DIR = os.environ.get("ORBI_ANSWERS_DIR") or os.path.expanduser(
     "~/Library/Application Support/Orbi/answers")
+# Messages queued in Orbi while a turn runs: queue/<session>.txt, sent when the turn ends.
+QUEUE_DIR = os.environ.get("ORBI_QUEUE_DIR") or os.path.join(os.path.dirname(ANSWERS_DIR), "queue")
+MAX_QUEUED = 4000
 NAMES = {"claude": "Claude", "gemini": "Gemini", "codex": "Codex", "antigravity": "Antigravity",
-         "cursor": "Cursor"}
+         "cursor": "Cursor", "opencode": "OpenCode"}
 # Notification types that don't mean "blocked on you right now".
 IGNORED_NOTIFICATIONS = {"idle_prompt", "auth_success"}
 POLL_SECONDS = 0.3
@@ -217,6 +222,17 @@ class Session:
             return started
         except (OSError, ValueError):
             return None  # no recorded start (e.g. hook added mid-session)
+
+    def take_queued(self):
+        """The message queued in Orbi for this session (removed once read), or None."""
+        path = os.path.join(QUEUE_DIR, self.context()["session"] + ".txt")
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read().strip()[:MAX_QUEUED]
+            os.remove(path)
+        except (OSError, ValueError):
+            return None
+        return text or None
 
     # Open bubbles of this session: {"kind": "wait"|"permission"|"reply", "id": ask id}.
     # File name `<agent>-<session>.pending.<n>` lets the resume guard test `<agent>-*.pending.*`.
@@ -380,6 +396,19 @@ def on_stop(s, data, flags):
     # Claude: last_assistant_message; Gemini AfterAgent: prompt_response.
     last = str(data.get("last_assistant_message") or data.get("prompt_response") or "").strip()
 
+    # A message queued in Orbi while the turn ran goes out now, whatever the turn's length.
+    # Only Claude can be woken this way (asyncRewake exit 2, or a blocking Stop decision).
+    queued = s.take_queued() if s.agent == "claude" else None
+    if queued:
+        open_url(build_url("agent/log", title=title, subtitle=message, detail=last[:3000], reply=queued,
+                           **s.context(elapsed, tokens)))
+        s.mark_start()  # the follow-up turn starts now
+        text = "The user queued this in Orbi (menu bar) while you worked, treat it as their next message:\n%s" % queued
+        if "--reply" in flags:
+            sys.stderr.write(text + "\n")
+            return 2, None
+        return 0, {"decision": "block", "reason": text}
+
     if long_turn and "--reply" in flags and last:
         # Orbi logs the ask itself (and your reply) in its Agents list.
         answer = ask(s, "reply", title, message, last[:3000], REPLY_TIMEOUT, seconds=elapsed, tokens=tokens)
@@ -387,6 +416,7 @@ def on_stop(s, data, flags):
         if (answer or {}).get("action") == "reply" and text:
             # asyncRewake: exit 2 wakes Claude and shows stderr to it.
             sys.stderr.write("The user replied from Orbi (menu bar), treat it as their next message:\n%s\n" % text)
+            s.mark_start()  # the follow-up turn starts now
             return 2, None
         return 0, {}
 

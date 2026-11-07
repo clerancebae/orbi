@@ -55,4 +55,4 @@ The `PostToolUse` guard is plain shell, so Python only starts while a bubble is 
 
 Every agent URL carries `session`, `agent`, `project`, `app` (the terminal / IDE bundle id, from `__CFBundleIdentifier` or `TERM_PROGRAM`) and, when a turn ends, `seconds`. Orbi uses them for the 🤖 indicator, the ↗ "go to app" button and the daily summary.
 
-Gemini CLI uses `prompt`, `stop`, `wait` and `resume` (`BeforeAgent`, `AfterAgent`, `Notification`, `AfterTool`; timeouts in ms). Codex: same as Claude's `UserPromptSubmit`/`Stop` in `~/.codex/hooks.json`, agent name `codex`. Tests: `/usr/bin/python3 -I mcp/test_agent_hook.py`.
+Gemini CLI uses `prompt`, `stop`, `wait` and `resume` (`BeforeAgent`, `AfterAgent`, `Notification`, `AfterTool`; timeouts in ms). Codex: same as Claude's `UserPromptSubmit`/`Stop` in `~/.codex/hooks.json` (needs `[features] codex_hooks = true`), agent name `codex`. OpenCode: a plugin (`~/.config/opencode/plugins/orbi.js`, written by Settings → AI agents) calls `opencode prompt|stop`. A message queued in Orbi (`queue/<session>.txt`) is sent by Claude's `stop` as the next prompt. Tests: `/usr/bin/python3 -I mcp/test_agent_hook.py`.

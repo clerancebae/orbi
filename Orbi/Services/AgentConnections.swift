@@ -4,21 +4,35 @@ import OSLog
 
 /// The agent CLIs Orbi can wire itself into.
 enum AgentKind: String, CaseIterable, Identifiable, Sendable {
-    case claude, gemini
+    case claude, gemini, codex, opencode
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
         case .claude: "Claude Code"
         case .gemini: "Gemini CLI"
+        case .codex: "Codex CLI"
+        case .opencode: "OpenCode"
         }
     }
 
-    /// `~/.claude/settings.json`, `~/.gemini/settings.json`.
+    /// The agent's config folder in the home folder; it exists once the agent has run.
+    var configDirectory: String {
+        switch self {
+        case .claude: ".claude"
+        case .gemini: ".gemini"
+        case .codex: ".codex"
+        case .opencode: ".config/opencode"
+        }
+    }
+
+    /// The file Orbi writes: hooks in `settings.json` / `hooks.json`, or OpenCode's plugin.
     var settingsPath: String {
         switch self {
         case .claude: ".claude/settings.json"
         case .gemini: ".gemini/settings.json"
+        case .codex: ".codex/hooks.json"
+        case .opencode: ".config/opencode/plugins/orbi.js"
         }
     }
 }
@@ -70,6 +84,13 @@ enum AgentHookConfig {
                 "Notification": group(entry("\(run) wait", timeout: 10_000, extra: ["name": "orbi-needs-you"])),
                 "AfterTool": group(entry(guarded, timeout: 10_000, extra: ["name": "orbi-resume"])),
             ]
+        case .codex:  // Claude-style hooks in ~/.codex/hooks.json (behind the `codex_hooks` feature flag).
+            return [
+                "UserPromptSubmit": group(entry("\(run) prompt", timeout: 10)),
+                "Stop": group(entry("\(run) stop", timeout: 10)),
+            ]
+        case .opencode:  // A JS plugin, not JSON hooks: see `OpenCodePlugin`.
+            return [:]
         }
     }
 
@@ -143,6 +164,89 @@ enum AgentHookConfig {
     }
 }
 
+/// Codex reads `hooks.json` only with `[features] codex_hooks = true` in `~/.codex/config.toml`.
+/// Plain line editing (no TOML parser): only that one key is ever touched.
+enum CodexConfig {
+    static func hooksEnabled(_ toml: String) -> Bool {
+        var section = ""
+        for raw in toml.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("[") { section = line; continue }
+            let compact = line.replacingOccurrences(of: " ", with: "")
+            if section == "[features]" && compact.hasPrefix("codex_hooks=true") { return true }
+            if section.isEmpty && compact.hasPrefix("features.codex_hooks=true") { return true }
+        }
+        return false
+    }
+
+    /// `toml` with the flag on: flips `codex_hooks = false`, else adds it under `[features]`.
+    static func enablingHooks(_ toml: String) -> String {
+        guard !hooksEnabled(toml) else { return toml }
+        var lines = toml.components(separatedBy: "\n")
+        var section = ""
+        for (i, raw) in lines.enumerated() {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("[") { section = line; continue }
+            if section == "[features]", line.replacingOccurrences(of: " ", with: "").hasPrefix("codex_hooks=") {
+                lines[i] = "codex_hooks = true"
+                return lines.joined(separator: "\n")
+            }
+        }
+        if let header = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "[features]" }) {
+            lines.insert("codex_hooks = true", at: header + 1)
+            return lines.joined(separator: "\n")
+        }
+        let base = toml.isEmpty || toml.hasSuffix("\n") ? toml : toml + "\n"
+        return base + (base.isEmpty ? "" : "\n") + "[features]\ncodex_hooks = true\n"
+    }
+}
+
+/// OpenCode has no command hooks; a small plugin in `~/.config/opencode/plugins/` calls the
+/// same hook script: a chat message starts a turn, `session.idle` ends it.
+enum OpenCodePlugin {
+    static func source(script: String) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .withoutEscapingSlashes
+        let path = (try? encoder.encode(script)).flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
+        return """
+        // Orbi: shows OpenCode's turns in the Orbi menu bar app. Written by Orbi (Settings → AI agents),
+        // removed there too. Calls \(AgentHookConfig.marker); never blocks OpenCode.
+        import { spawn } from "node:child_process";
+
+        const SCRIPT = \(path);
+
+        function send(event, data) {
+          try {
+            const child = spawn("/usr/bin/python3", ["-I", SCRIPT, "opencode", event], {
+              stdio: ["pipe", "ignore", "ignore"],
+              detached: true,
+            });
+            child.on("error", () => {});
+            child.stdin.end(JSON.stringify(data));
+            child.unref();
+          } catch {}
+        }
+
+        export const OrbiPlugin = async ({ directory }) => ({
+          "chat.message": async (input) => {
+            send("prompt", { session_id: input?.sessionID, cwd: directory });
+          },
+          event: async ({ event }) => {
+            if (event?.type === "session.idle") {
+              send("stop", { session_id: event.properties?.sessionID, cwd: directory });
+            }
+          },
+        });
+
+        """
+    }
+
+    static func status(of contents: String?, script: String) -> AgentHookConfig.Status {
+        guard let contents, contents.contains(AgentHookConfig.marker) else { return .notConnected }
+        return contents == source(script: script) ? .connected : .outdated
+    }
+}
+
 /// Settings → AI agents: connects Orbi to Claude Code / Gemini CLI by writing its hooks into
 /// their `settings.json` (a backup is kept next to it the first time). Uses the scripts inside
 /// Orbi.app, so nothing else needs to be downloaded.
@@ -178,7 +282,7 @@ final class AgentConnections {
     /// The agents installed on this Mac (their config folder exists). Claude Code is always offered.
     var availableAgents: [AgentKind] {
         AgentKind.allCases.filter { kind in
-            kind == .claude || FileManager.default.fileExists(atPath: home.appending(path: ".\(kind.rawValue)").path)
+            kind == .claude || FileManager.default.fileExists(atPath: home.appending(path: kind.configDirectory).path)
         }
     }
 
@@ -199,8 +303,17 @@ final class AgentConnections {
     func refresh() {
         guard let script = hookScript else { return }
         for kind in AgentKind.allCases {
-            statuses[kind] = AgentHookConfig.status(of: readSettings(kind) ?? [:], kind: kind, script: script,
-                                                    replies: replies())
+            switch kind {
+            case .opencode:
+                statuses[kind] = OpenCodePlugin.status(of: readText(settingsURL(kind)), script: script)
+            case .codex:
+                let status = AgentHookConfig.status(of: readSettings(kind) ?? [:], kind: kind, script: script)
+                let flagOn = CodexConfig.hooksEnabled(readText(codexConfigURL) ?? "")
+                statuses[kind] = status == .connected && !flagOn ? .outdated : status
+            case .claude, .gemini:
+                statuses[kind] = AgentHookConfig.status(of: readSettings(kind) ?? [:], kind: kind, script: script,
+                                                        replies: replies())
+            }
         }
     }
 
@@ -209,8 +322,16 @@ final class AgentConnections {
             lastError = "The hook script is missing from Orbi.app."
             return
         }
-        let replies = replies()
-        write(kind) { AgentHookConfig.connect($0, kind: kind, script: script, replies: replies) }
+        switch kind {
+        case .opencode:
+            writeText(settingsURL(kind), OpenCodePlugin.source(script: script))
+        case .codex:
+            writeText(codexConfigURL, CodexConfig.enablingHooks(readText(codexConfigURL) ?? ""), backup: true)
+            write(kind) { AgentHookConfig.connect($0, kind: kind, script: script) }
+        case .claude, .gemini:
+            let replies = replies()
+            write(kind) { AgentHookConfig.connect($0, kind: kind, script: script, replies: replies) }
+        }
     }
 
     /// After a setting that changes the hooks (reply mode): rewrite the connected agents.
@@ -220,6 +341,15 @@ final class AgentConnections {
     }
 
     func disconnect(_ kind: AgentKind) {
+        if kind == .opencode {
+            // Only ever remove Orbi's own plugin file.
+            if readText(settingsURL(kind))?.contains(AgentHookConfig.marker) == true {
+                try? FileManager.default.removeItem(at: settingsURL(kind))
+            }
+            refresh()
+            return
+        }
+        // Codex's feature flag stays on: other hooks may use it.
         write(kind) { AgentHookConfig.disconnect($0) }
     }
 
@@ -232,6 +362,32 @@ final class AgentConnections {
     // MARK: - Files
 
     private func settingsURL(_ kind: AgentKind) -> URL { home.appending(path: kind.settingsPath) }
+
+    private var codexConfigURL: URL { home.appending(path: ".codex/config.toml") }
+
+    private func readText(_ url: URL) -> String? {
+        try? String(contentsOf: url, encoding: .utf8)
+    }
+
+    /// Writes a text file (keeps a one-time `.orbi-backup` of what was there if `backup`).
+    private func writeText(_ url: URL, _ text: String, backup: Bool = false) {
+        let fm = FileManager.default
+        do {
+            if backup, let old = try? Data(contentsOf: url), !old.isEmpty {
+                let copy = url.appendingPathExtension("orbi-backup")
+                if !fm.fileExists(atPath: copy.path) { try old.write(to: copy) }
+            }
+            if readText(url) != text {
+                try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try Data(text.utf8).write(to: url, options: .atomic)
+            }
+            lastError = nil
+        } catch {
+            lastError = "Couldn't update \(url.lastPathComponent): \(error.localizedDescription)"
+            log.error("Writing \(url.path, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+        }
+        refresh()
+    }
 
     private func readSettings(_ kind: AgentKind) -> [String: Any]? {
         guard let data = try? Data(contentsOf: settingsURL(kind)) else { return nil }

@@ -53,7 +53,7 @@ struct URLRouterTests {
 
     @Test func longTitleIsCapped() {
         let long = String(repeating: "a", count: 400)
-        guard case .success(.taskAdd(let title, _, _)) = parse("orbi://task/add?title=\(long)") else {
+        guard case .success(.taskAdd(let title, _, _, _)) = parse("orbi://task/add?title=\(long)") else {
             Issue.record("expected taskAdd"); return
         }
         #expect(title.count == URLRouter.maxTitleLength)

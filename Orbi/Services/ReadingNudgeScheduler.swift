@@ -18,6 +18,9 @@ final class ReadingNudgeScheduler {
     private let lastCheckedDay: () -> String?
     private let setLastCheckedDay: (String) -> Void
     private let armOverride: ((Date?) -> Void)?
+    /// Focus mode: the nudge waits (no timer) until `quietEnded()`.
+    private let quiet: () -> Bool
+    private(set) var waitingForQuiet = false
     private let timer = OneShotTimer(tolerance: 30)
     private(set) var nextNudge: Date?
 
@@ -28,7 +31,9 @@ final class ReadingNudgeScheduler {
          post: @escaping (ReadingSummary) -> Void,
          lastCheckedDay: @escaping () -> String?,
          setLastCheckedDay: @escaping (String) -> Void,
+         quiet: @escaping () -> Bool = { false },
          armTimer: ((Date?) -> Void)? = nil) {
+        self.quiet = quiet
         self.config = config
         self.now = now
         self.calendar = calendar
@@ -54,8 +59,19 @@ final class ReadingNudgeScheduler {
         let today = Self.dayKey(current, calendar: calendar)
         // Checked today already (nudged, or nothing was waiting): never more than one per day.
         guard lastCheckedDay() != today, config().enabled else { rearm(); return }
+        if quiet() {
+            // Not armed again until focus ends, so it can't fire in a loop.
+            waitingForQuiet = true
+            return
+        }
         setLastCheckedDay(today)
         if let summary = summary() { post(summary) }
+        rearm()
+    }
+
+    func quietEnded() {
+        guard waitingForQuiet else { return }
+        waitingForQuiet = false
         rearm()
     }
 

@@ -69,6 +69,11 @@ final class WaterStore {
         }
     }
 
+    /// Glasses logged since `start`, for the weekly summary.
+    func count(since start: Date) -> Int {
+        (try? context.fetchCount(FetchDescriptor<WaterLog>(predicate: #Predicate { $0.timestamp >= start }))) ?? 0
+    }
+
     private func todayBounds() -> (Date, Date) {
         let start = calendar.startOfDay(for: now())
         // Adding one day to a valid start of day always succeeds in the Gregorian-family calendars we use.

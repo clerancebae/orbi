@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TodaySection: View {
     @Environment(TaskStore.self) private var store
+    @Environment(AppSettings.self) private var settings
     @State private var newTask = ""
     @FocusState private var addFieldFocused: Bool
 
@@ -35,6 +36,11 @@ struct TodaySection: View {
     private var header: some View {
         HStack {
             Label("Today", systemImage: "checklist").font(.subheadline.weight(.semibold))
+            if settings.focusMode && store.activeTask != nil {
+                Image(systemName: "moon.fill")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .help("Focus: water and read-later reminders wait until this task is paused or done")
+            }
             Spacer()
             if !store.tasks.isEmpty {
                 Text("\(store.doneTasks.count)/\(store.tasks.count) done")
@@ -68,6 +74,7 @@ struct TodaySection: View {
 
 private struct TaskRow: View {
     @Environment(TaskStore.self) private var store
+    @Environment(AgentLogStore.self) private var agents
     let task: TaskItem
 
     @State private var isEditing = false
@@ -91,6 +98,12 @@ private struct TaskRow: View {
                     .foregroundStyle(task.status == .done ? .secondary : .primary)
                     .fontWeight(task.status == .active ? .semibold : .regular)
                     .onTapGesture(count: 2, perform: beginRename)
+            }
+
+            if let project = task.project {
+                Text("#\(project)")
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    .help(agentHelp(project))
             }
 
             Spacer(minLength: 4)
@@ -146,6 +159,20 @@ private struct TaskRow: View {
             Button("Complete") { store.complete(task) }
         }
         Button("Rename") { beginRename() }
+        Menu("Project") {
+            ForEach(agents.knownProjects, id: \.self) { project in
+                Button {
+                    store.setProject(task, project)
+                } label: {
+                    if TaskStore.sameProject(task.project, project) { Label(project, systemImage: "checkmark") } else { Text(project) }
+                }
+            }
+            if agents.knownProjects.isEmpty {
+                Text("Type #project when adding a task")
+            }
+            Divider()
+            Button("No project") { store.setProject(task, nil) }
+        }
         Menu("Estimate") {
             ForEach(Self.estimatePresets, id: \.self) { minutes in
                 Button(DurationText.minutes(minutes)) { store.setEstimate(task, minutes: minutes) }
@@ -155,6 +182,15 @@ private struct TaskRow: View {
         }
         Divider()
         Button("Delete", role: .destructive) { store.delete(task) }
+    }
+
+    /// "When an agent starts in api, this task starts. Agent today: 25m".
+    private func agentHelp(_ project: String) -> String {
+        var text = "When an agent starts working in \(project) and nothing is running, this task starts."
+        let seconds = (agents.today.projectSeconds ?? [:])
+            .filter { TaskStore.sameProject($0.key, project) }.values.reduce(0, +)
+        if seconds >= 60 { text += " Agent time today: \(DurationText.minutes(DurationText.floorMinutes(seconds)))." }
+        return text
     }
 
     private var isOver: Bool {

@@ -25,9 +25,11 @@ extension AppEnvironment {
             nextWaterReminder: reminders.nextDue,
             readingCount: readingStore.items.count,
             nextEvent: calendar.nextEvent.map { "\($0.start.formatted(date: .omitted, time: .shortened)) \($0.title)" },
-            tasks: (taskStore.openTasks + taskStore.doneTasks).map {
-                .init(title: $0.title, status: $0.status.rawValue, estimateMin: $0.estimatedMinutes,
-                      spentMin: DurationText.floorMinutes(taskStore.elapsedSeconds($0)))
+            tasks: (taskStore.openTasks + taskStore.doneTasks).map { task in
+                .init(title: task.title, status: task.status.rawValue, estimateMin: task.estimatedMinutes,
+                      spentMin: DurationText.floorMinutes(taskStore.elapsedSeconds(task)),
+                      project: task.project,
+                      agentMin: agentSeconds(project: task.project).map(DurationText.floorMinutes))
             },
             upcoming: taskStore.upcoming.map {
                 .init(title: $0.title, date: dayFormatter.string(from: $0.plannedDate), estimateMin: $0.estimatedMinutes)
@@ -46,8 +48,19 @@ extension AppEnvironment {
             },
             agentsRunning: agentLog.running.map { .init(agent: $0.agent, project: $0.project, since: $0.startedAt) },
             agentsToday: agentLog.today.turns > 0 ? agentLog.today : nil,
+            week: WeekSummary.make(tasks: taskStore, water: waterStore, reading: readingStore, agents: agentLog, now: now),
             updatedAt: now
         )
+    }
+}
+
+extension AppEnvironment {
+    /// Today's agent seconds in `project` (case-insensitive), nil when none.
+    func agentSeconds(project: String?) -> Int? {
+        guard let project else { return nil }
+        let total = (agentLog.today.projectSeconds ?? [:])
+            .filter { TaskStore.sameProject($0.key, project) }.values.reduce(0, +)
+        return total > 0 ? total : nil
     }
 }
 

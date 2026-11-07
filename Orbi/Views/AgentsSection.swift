@@ -147,25 +147,75 @@ private struct LimitsView: View {
 }
 
 /// A session in the middle of a turn: "orbi · working 4m" (like the event rows; the agent name on hover).
+/// Claude sessions can get a queued message: it goes out as the next prompt the moment the turn ends.
 private struct RunningRow: View {
+    @Environment(AgentLogStore.self) private var store
     let agent: RunningAgent
     @State private var hovering = false
+    @State private var editing = false
+    @State private var draft = ""
+    @FocusState private var fieldFocused: Bool
+
+    private var canQueue: Bool { AgentLogStore.canQueue(session: agent.session) }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            ProgressView().controlSize(.mini).frame(width: 16)
-            // Static minutes (refreshed whenever the panel re-renders), not a per-second timer.
-            let minutes = max(1, DurationText.floorMinutes(Int(Date.now.timeIntervalSince(agent.startedAt))))
-            (Text(agent.project ?? agent.agent)
-                + Text(" · working \(DurationText.minutes(minutes))").foregroundStyle(.secondary))
-                .font(.callout).monospacedDigit().lineLimit(1)
-            Spacer(minLength: 4)
-            if hovering, let app = agent.app {
-                GoToAppButton(bundleID: app)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                ProgressView().controlSize(.mini).frame(width: 16)
+                // Static minutes (refreshed whenever the panel re-renders), not a per-second timer.
+                let minutes = max(1, DurationText.floorMinutes(Int(Date.now.timeIntervalSince(agent.startedAt))))
+                (Text(agent.project ?? agent.agent)
+                    + Text(" · working \(DurationText.minutes(minutes))").foregroundStyle(.secondary))
+                    .font(.callout).monospacedDigit().lineLimit(1)
+                Spacer(minLength: 4)
+                if canQueue && !editing && store.queued[agent.session] == nil {
+                    Button { startEditing() } label: { Image(systemName: "text.badge.plus") }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.secondary)
+                        .help("Queue the next message: sent as soon as \(agent.agent) finishes")
+                }
+                if hovering, let app = agent.app {
+                    GoToAppButton(bundleID: app)
+                }
+            }
+
+            if let queued = store.queued[agent.session] {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "arrow.turn.down.right").foregroundStyle(.secondary).frame(width: 16)
+                    Text(queued).font(.callout).lineLimit(2)
+                        .help("Sent as soon as \(agent.agent) finishes this turn")
+                    Spacer(minLength: 4)
+                    Button { draft = queued; startEditing() } label: { Image(systemName: "pencil") }
+                        .buttonStyle(.borderless).foregroundStyle(.secondary).help("Edit")
+                    Button { store.unqueue(session: agent.session) } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.borderless).foregroundStyle(.secondary).help("Don't send")
+                }
+                .font(.caption)
+            } else if editing {
+                TextField("Next message, sent when \(agent.agent) finishes", text: $draft, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(1...4)
+                    .focused($fieldFocused)
+                    .onSubmit(commit)
+                    .onExitCommand { editing = false; draft = "" }
+                    .padding(.leading, 22)
             }
         }
         .help(agent.agent)
         .onHover { hovering = $0 }
+    }
+
+    private func startEditing() {
+        if store.queued[agent.session] != nil { store.unqueue(session: agent.session) }
+        editing = true
+        fieldFocused = true
+    }
+
+    private func commit() {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty { store.queue(text, session: agent.session) }
+        editing = false
+        draft = ""
     }
 }
 

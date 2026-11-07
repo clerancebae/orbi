@@ -12,6 +12,7 @@ struct PanelView: View {
     @Environment(AgentLogStore.self) private var agentLog
     @Environment(AppSettings.self) private var settings
     @Environment(\.openSettings) private var openSettings
+    @State private var week: WeekSummary?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -46,12 +47,20 @@ struct PanelView: View {
             loginItems.refresh()
             agentLog.pruneStale()
             agentLog.markSeen()  // you looked: finished turns are no longer "your turn"
+            week = WeekSummary.make(tasks: tasks, water: water, reading: reading, agents: agentLog)
         }
         .task { await notifications.refreshAuthorization() }
     }
 
     @ViewBuilder
     private var footer: some View {
+        if let line = week?.text(showWater: settings.showWater, showReading: settings.showReading) {
+            Label(line, systemImage: "chart.bar")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
         if let event = calendar.nextEvent {
             Label {
                 Text("\(event.start.formatted(date: .omitted, time: .shortened))  \(event.title)")

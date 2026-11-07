@@ -15,7 +15,8 @@ STATUS = {
     "activeTask": "API docs", "remainingMin": -4, "elapsedMin": 29, "water": 5, "waterGoal": 8,
     "waterReminderDue": False, "nextWaterReminder": "2026-11-07T11:30:00Z", "readingCount": 1,
     "nextEvent": "14:00 Standup",
-    "tasks": [{"title": "API docs", "status": "active", "estimateMin": 25, "spentMin": 29},
+    "tasks": [{"title": "API docs", "status": "active", "estimateMin": 25, "spentMin": 29,
+               "project": "api", "agentMin": 40},
               {"title": "Email", "status": "done", "estimateMin": None, "spentMin": 10}],
     "upcoming": [{"title": "Plan sprint", "date": "2026-11-08", "estimateMin": 60}],
     "reading": [{"title": "Swift 6", "url": "https://swift.org", "savedAt": "2026-11-01T10:00:00Z",
@@ -26,6 +27,8 @@ STATUS = {
     "agentsRunning": [{"agent": "Claude", "project": "Orbi", "since": "2026-11-07T09:55:00Z"}],
     "agentsToday": {"seconds": 7800, "turns": 14, "projects": ["Orbi", "api"], "allowed": 12, "denied": 1,
                     "replies": 3},
+    "week": {"since": "2026-11-02", "agentSeconds": 32400, "agentTurns": 60, "tasksDone": 23, "read": 6,
+             "water": 31},
     "updatedAt": "2026-11-07T10:00:00Z",
 }
 
@@ -76,7 +79,9 @@ class Tests(unittest.TestCase):
         self.assertFalse(r[1]["result"]["isError"])
         self.assertIn("Active task: API docs (4m over the estimate)", text)
         self.assertIn("Today's tasks (1 done of 2)", text)
-        self.assertIn("[>] API docs (est 25m, spent 29m)", text)
+        self.assertIn("[>] API docs (est 25m, spent 29m, project api, agent worked 40m on it today)", text)
+        self.assertIn("This week (since 2026-11-02): 9h of agent work (60 turns), 23 tasks done, 6 read, "
+                      "31 glasses of water", text)
         self.assertIn("2026-11-08: Plan sprint (est 1h)", text)
         self.assertIn("Water: 5/8 glasses", text)
         self.assertIn("Next calendar event: 14:00 Standup", text)
@@ -94,11 +99,13 @@ class Tests(unittest.TestCase):
     def test_add_tasks_encodes_urls(self):
         r = session([INIT, call(2, "add_tasks", {"tasks": [
             {"title": "C++ & docs", "minutes": 25},
-            {"title": "Plan sprint", "date": "tomorrow"}]})])
+            {"title": "Plan sprint", "date": "tomorrow"},
+            {"title": "Fix login", "project": "api"}]})])
         text = r[1]["result"]["content"][0]["text"]
         urls = [l for l in text.splitlines() if l.startswith("orbi://")]
         self.assertEqual(urls[0], "orbi://task/add?title=C%2B%2B%20%26%20docs&min=25")
         self.assertEqual(urls[1], "orbi://task/add?title=Plan%20sprint&date=tomorrow")
+        self.assertEqual(urls[2], "orbi://task/add?title=Fix%20login&project=api")
         self.assertEqual(unquote(urls[0].split("title=")[1].split("&")[0]), "C++ & docs")
 
     def test_add_tasks_validation(self):

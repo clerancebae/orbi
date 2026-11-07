@@ -58,6 +58,8 @@ targets:
           - /Library/Application Support/Orbi/
           - /.claude/
           - /.gemini/
+          - /.codex/
+          - /.config/opencode/
   OrbiTests:
     type: bundle.unit-test
     platform: macOS

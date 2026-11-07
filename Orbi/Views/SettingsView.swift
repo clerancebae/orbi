@@ -33,9 +33,20 @@ struct SettingsView: View {
                 }
                 Toggle("Reply from the “finished” bubble", isOn: $settings.agentReplies)
                     .help("Off: a plain “finished” bubble instead of one with a reply field")
+                Toggle("Keyboard shortcuts for agent bubbles", isOn: $settings.bubbleHotkeys)
+                    .help("Only while a bubble is open")
+                Text("From any app: ⌥⌘Y allows, ⌥⌘N denies, ⌥⌘R jumps into the reply field. "
+                     + "The keys are taken only while such a bubble is open.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Warn when a Claude plan limit passes 80% and 95%", isOn: $settings.limitWarnings)
                 Text("Adds Orbi's hooks to the agent's settings.json (your own hooks stay; a backup is kept): "
                      + "permission and reply bubbles, 🤖 in the menu bar, the Agents list.")
                     .font(.caption).foregroundStyle(.secondary)
+                if agents.availableAgents.contains(.codex) || agents.availableAgents.contains(.opencode) {
+                    Text("Codex and OpenCode: running and finished turns only (no permission or reply bubbles). "
+                         + "Codex also gets `codex_hooks = true` in ~/.codex/config.toml; OpenCode gets a small plugin.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 if let error = agents.lastError {
                     Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
                 }
@@ -50,6 +61,12 @@ struct SettingsView: View {
                         }
                     }
                 }
+            }
+
+            Section("Focus") {
+                Toggle("Quiet while a task runs", isOn: $settings.focusMode)
+                Text("Water and read-later reminders wait until the task is paused or done. Agent bubbles still show.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Panel") {

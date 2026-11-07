@@ -280,6 +280,42 @@ class Tests(unittest.TestCase):
                                capture_output=True, text=True, env=self.env(ORBI_ASK_TIMEOUT="0.2"), timeout=10)
             self.assertEqual((p.returncode, p.stdout.strip()), (0, "{}"))
 
+    def write_queue(self, session, text):
+        qdir = os.path.join(self.tmp, "queue")
+        os.makedirs(qdir, exist_ok=True)
+        with open(os.path.join(qdir, session + ".txt"), "w") as f:
+            f.write(text)
+        return os.path.join(qdir, session + ".txt")
+
+    def test_queued_message_wakes_claude_with_reply_flag(self):
+        path = self.write_queue("claude-s1", "  run the tests too \n")
+        p = subprocess.run([sys.executable, "-I", HOOK, "claude", "stop", "--reply"],
+                           input=json.dumps(dict(S1, last_assistant_message="Done.")),
+                           capture_output=True, text=True, env=self.env(ORBI_QUEUE_DIR=os.path.dirname(path)), timeout=20)
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("run the tests too", p.stderr)
+        self.assertFalse(os.path.exists(path))
+        urls = [l for l in p.stderr.splitlines() if l.startswith("orbi://")]
+        self.assertEqual(len(urls), 1)
+        q = {k: v[0] for k, v in parse_qs(urlparse(urls[0]).query).items()}
+        self.assertTrue(urls[0].startswith("orbi://agent/log?"))
+        self.assertEqual(q["reply"], "run the tests too")
+        self.assertEqual(q["session"], "claude-s1")
+
+    def test_queued_message_blocks_stop_without_reply_flag(self):
+        path = self.write_queue("claude-s1", "next step")
+        code, out, _ = self.run_hook("claude", "stop", S1, ORBI_QUEUE_DIR=os.path.dirname(path))
+        self.assertEqual(code, 0)
+        decision = json.loads(out)
+        self.assertEqual(decision["decision"], "block")
+        self.assertIn("next step", decision["reason"])
+
+    def test_queue_ignored_for_other_agents(self):
+        path = self.write_queue("gemini-s1", "hi")
+        code, out, urls = self.run_hook("gemini", "stop", S1, ORBI_QUEUE_DIR=os.path.dirname(path))
+        self.assertEqual((code, out), (0, "{}"))
+        self.assertTrue(os.path.exists(path))
+
 
 if __name__ == "__main__":
     unittest.main()

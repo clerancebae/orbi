@@ -25,7 +25,8 @@ enum OrbiAction: Equatable, Sendable {
     case waterUndo
     case taskStartNext
     case taskComplete
-    case taskAdd(title: String, minutes: Int?, day: PlannedDay)
+    /// `project`: the agent project (folder name) the task belongs to; an agent starting there starts it.
+    case taskAdd(title: String, minutes: Int?, day: PlannedDay, project: String? = nil)
     case readingSave(url: URL, title: String?)
     case readingOpenNext
     case capture
@@ -40,7 +41,9 @@ enum OrbiAction: Equatable, Sendable {
     /// The question was answered elsewhere (e.g. in the terminal): close it without answering.
     case askCancel(id: String)
     /// Silent entry in the Agents list (a finished turn that showed no bubble).
-    case agentLog(title: String, subtitle: String?, detail: String?, context: AgentContext = .none)
+    /// `reply`: a message you queued in Orbi, which the hook has just sent as the next prompt.
+    case agentLog(title: String, subtitle: String?, detail: String?, context: AgentContext = .none,
+                  reply: String? = nil)
     /// An agent session started a turn (menu bar shows it as running).
     case agentStart(AgentContext)
     /// The session's turn ended or it went idle (e.g. interrupted).
@@ -139,7 +142,9 @@ enum URLRouter {
                     .map { String($0.prefix(maxNotifyLength * 2)) },
                 detail: query["detail"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                     .map { String($0.prefix(maxAskDetailLength)) },
-                context: parseContext(query)))
+                context: parseContext(query),
+                reply: query["reply"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    .map { String($0.prefix(maxAskDetailLength)) }))
         case "usage": return parseUsage(query)
         case "ask/cancel":
             guard let id = query["id"], isValidAskID(id) else { return .failure(.invalidParameter("id")) }
@@ -154,6 +159,8 @@ enum URLRouter {
         }
         var title = String(rawTitle.prefix(maxTitleLength))
         var minutes: Int?
+        var project = query["project"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            .map { String($0.prefix(120)) }
 
         if let rawMinutes = query["min"], !rawMinutes.isEmpty {
             guard let value = Int(rawMinutes), (1...1440).contains(value) else {
@@ -161,9 +168,10 @@ enum URLRouter {
             }
             minutes = value
         } else if let parsed = TaskInputParser.parse(title) {
-            // Allow "title=Write docs 25m" too.
+            // Allow "title=Write docs 25m" (and "#project") too.
             title = parsed.title
             minutes = parsed.estimatedMinutes
+            project = project ?? parsed.project
         }
 
         var day = PlannedDay.today
@@ -171,7 +179,7 @@ enum URLRouter {
             guard let parsed = parseDay(rawDate) else { return .failure(.invalidParameter("date")) }
             day = parsed
         }
-        return .success(.taskAdd(title: title, minutes: minutes, day: day))
+        return .success(.taskAdd(title: title, minutes: minutes, day: day, project: project))
     }
 
     private static func parseReadingSave(_ query: [String: String]) -> Result<OrbiAction, RouteError> {
@@ -221,6 +229,12 @@ enum URLRouter {
                                       context: parseContext(query),
                                       alwaysRule: query["always"]?.trimmingCharacters(in: .whitespacesAndNewlines)
                                           .nilIfEmpty.map { String($0.prefix(200)) })))
+    }
+
+    /// Session ids name queue files, so only plain ids are accepted.
+    static func isValidSession(_ session: String) -> Bool {
+        (1...120).contains(session.count)
+            && session.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
     }
 
     /// Optional agent fields shared by agent routes. Invalid values are dropped, not errors,
