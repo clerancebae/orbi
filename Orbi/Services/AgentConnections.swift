@@ -73,10 +73,22 @@ enum AgentHookConfig {
         }
     }
 
+    /// Claude Code's status line: shows the plan limits and sends them to Orbi.
+    static func statusLine(script: String) -> [String: Any] {
+        ["type": "command", "command": "/usr/bin/python3 -I '\(script)' claude statusline", "padding": 0]
+    }
+
     /// Connected only if Orbi's commands are exactly the current ones (script path, reply mode).
+    /// Claude: Orbi's status line too, unless the user has a status line of their own.
     static func status(of settings: [String: Any], kind: AgentKind, script: String, replies: Bool = true) -> Status {
         let commands = orbiCommands(in: settings)
         guard !commands.isEmpty else { return .notConnected }
+        if kind == .claude {
+            guard let line = settings["statusLine"] as? [String: Any] else { return .outdated }
+            if isOrbi(line) && line["command"] as? String != statusLine(script: script)["command"] as? String {
+                return .outdated
+            }
+        }
         let wanted = hooks(for: kind, script: script, replies: replies).values
             .flatMap { $0.flatMap { ($0["hooks"] as? [[String: Any]] ?? []).compactMap { $0["command"] as? String } } }
         return commands.sorted() == wanted.sorted() ? .connected : .outdated
@@ -91,11 +103,14 @@ enum AgentHookConfig {
             hooksDict[event] = (hooksDict[event] as? [[String: Any]] ?? []) + groups
         }
         result["hooks"] = hooksDict
+        if kind == .claude && result["statusLine"] == nil { result["statusLine"] = statusLine(script: script) }
         return result
     }
 
-    /// Removes only Orbi's hooks; empty groups / events left behind are dropped.
+    /// Removes only Orbi's hooks (and Orbi's status line); empty groups / events left behind are dropped.
     static func disconnect(_ settings: [String: Any]) -> [String: Any] {
+        var settings = settings
+        if let line = settings["statusLine"] as? [String: Any], isOrbi(line) { settings["statusLine"] = nil }
         guard var hooksDict = settings["hooks"] as? [String: Any] else { return settings }
         for (event, value) in hooksDict {
             guard let groups = value as? [[String: Any]] else { continue }

@@ -65,7 +65,11 @@ struct MenuBarAgentsTests {
     @Test func daySummary() {
         #expect(AgentsSection.summary(AgentDayStats()) == nil)
         let s = AgentDayStats(seconds: 7800, turns: 14, projects: ["Orbi", "api", "web"], allowed: 12, denied: 1, replies: 3)
-        #expect(AgentsSection.summary(s) == "Today: 2h 10m across 3 projects · 14 turns · 12 approved, 1 denied · 3 replies")
+        #expect(AgentsSection.summary(s) == "Today: 2h 10m · 14 turns")
+        var t = s
+        t.tokens = 1_420_000
+        #expect(AgentsSection.summary(t) == "Today: 2h 10m · 14 turns · 1.4M tokens")
+        #expect(AgentsSection.summary(AgentDayStats(allowed: 2)) == nil)
         #expect(AgentsSection.summary(AgentDayStats(seconds: 30, turns: 1)) == "Today: 1 turn")
     }
 }

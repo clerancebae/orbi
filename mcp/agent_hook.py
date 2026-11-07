@@ -8,6 +8,7 @@ Works with any agent whose hooks send JSON on stdin (session_id, cwd):
   agent_hook.py <agent> permission      may I run X?   (Claude: PermissionRequest)
   agent_hook.py <agent> wait            needs the user (Claude: Notification,     Gemini: Notification)
   agent_hook.py <agent> resume          agent went on  (Claude: PostToolUse,      Gemini: AfterTool)
+  agent_hook.py <agent> statusline      status line    (Claude: statusLine command)
 
 <agent> is a short name shown in the bubble: claude, gemini, codex, … (unknown names are capitalized).
 
@@ -21,6 +22,11 @@ Works with any agent whose hooks send JSON on stdin (session_id, cwd):
 - prompt: marks the session as running (menu bar 🤖) and closes this session's open bubbles.
 - wait: a sticky "needs you" bubble until the agent continues. `idle_prompt` instead ends the running
   state (covers turns interrupted with Esc, where Stop doesn't fire). Auth notices are ignored.
+- stop also counts the turn's tokens from the transcript (Claude: input + cache writes + output; Gemini:
+  input − cached + output + thoughts; cache reads left out, they'd dwarf the rest) for the bubble and
+  Orbi's day total.
+- statusline: prints "5h 23% · 7d 41%" for Claude's status line and sends the plan limits (rate_limits,
+  Claude.ai plans only) to Orbi as `orbi://usage`, only when a rounded value changes.
 - The host app (`__CFBundleIdentifier` / `TERM_PROGRAM`) is passed along, so Orbi's ↗ brings it forward.
 - prompt / resume close this session's open bubbles (answered in the terminal). resume runs after every
   tool call, so its hook command first checks for a pending file in pure shell; Python only starts then.
@@ -68,6 +74,94 @@ def duration_text(seconds):
     return "%d h %02d min" % (minutes // 60, minutes % 60)
 
 
+def token_text(n):
+    if n >= 1_000_000:
+        return "%.1fM tokens" % (n / 1_000_000.0)
+    if n >= 1000:
+        return "%dk tokens" % int(round(n / 1000.0))
+    return "%d tokens" % n
+
+
+def parse_time(value):
+    """Epoch seconds from a number or an ISO 8601 string, else None."""
+    if isinstance(value, (int, float)) and value > 0:
+        return float(value) / (1000.0 if value > 1e11 else 1.0)
+    if isinstance(value, str) and value:
+        from datetime import datetime
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
+TRANSCRIPT_TAIL = 8 * 1024 * 1024
+
+
+def gemini_tokens(conversation, since):
+    """Gemini CLI transcript: one JSON object, `messages[].tokens` on its replies."""
+    total = 0
+    for message in reversed(conversation.get("messages") or []):
+        if not isinstance(message, dict):
+            continue
+        stamp = parse_time(message.get("timestamp"))
+        if stamp is not None and stamp < since - 1:
+            break
+        tokens = message.get("tokens")
+        if message.get("type") != "gemini" or not isinstance(tokens, dict):
+            continue
+        n = lambda k: tokens.get(k) if isinstance(tokens.get(k), int) else 0
+        total += max(0, n("input") - n("cached")) + n("output") + n("thoughts")
+    return total
+
+
+def turn_tokens(path, since):
+    """Tokens of the replies logged at or after `since` (epoch) in a Claude (JSON lines) or Gemini
+    (one JSON object) transcript. Each Claude API response is counted once (it spans several lines)."""
+    if not path or since is None:
+        return None
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - TRANSCRIPT_TAIL))
+            data = f.read()
+    except OSError:
+        return None
+    if size <= TRANSCRIPT_TAIL and data.lstrip()[:1] == b"{":
+        try:
+            whole = json.loads(data)
+            if isinstance(whole, dict) and isinstance(whole.get("messages"), list):
+                return gemini_tokens(whole, since)
+        except ValueError:
+            pass
+    lines = data.splitlines()
+    seen, total = set(), 0
+    for raw in reversed(lines):
+        try:
+            entry = json.loads(raw)
+        except ValueError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        stamp = parse_time(entry.get("timestamp"))
+        if stamp is not None and stamp < since - 1:
+            break
+        message = entry.get("message")
+        if entry.get("type") != "assistant" or not isinstance(message, dict):
+            continue
+        usage = message.get("usage")
+        key = message.get("id") or entry.get("requestId") or entry.get("uuid")
+        if not isinstance(usage, dict) or key in seen:
+            continue
+        seen.add(key)
+        for field in ("input_tokens", "cache_creation_input_tokens", "output_tokens"):
+            value = usage.get(field)
+            if isinstance(value, int) and value > 0:
+                total += value
+    return total
+
+
 def open_url(url):
     if DRY_RUN:
         sys.stderr.write(url + "\n")
@@ -100,10 +194,11 @@ class Session:
         self.project = os.path.basename((data.get("cwd") or os.getcwd()).rstrip("/")) or self.name
         self.app = host_app()
 
-    def context(self, seconds=None):
+    def context(self, seconds=None, tokens=None):
         """Agent fields Orbi uses for the running list, "go to project" and the day summary."""
         return {"session": "%s-%s" % (self.agent, self.id), "agent": self.name, "project": self.project,
-                "app": self.app, "seconds": int(seconds) if seconds is not None else None}
+                "app": self.app, "seconds": int(seconds) if seconds is not None else None,
+                "tokens": tokens}
 
     def path(self, ext):
         return os.path.join(STATE_DIR, "%s-%s.%s" % (self.agent, self.id, ext))
@@ -180,12 +275,12 @@ def wait_answer(ask_id, timeout):
     return None
 
 
-def ask(s, kind, title, message, detail, timeout, seconds=None, always=None):
+def ask(s, kind, title, message, detail, timeout, seconds=None, always=None, tokens=None):
     """Shows an interactive bubble and waits for the answer (None if it timed out)."""
     ask_id = uuid.uuid4().hex[:16]
     pending = s.add_pending(kind, ask_id)
     open_url(build_url("ask", id=ask_id, kind=kind, title=title, message=message, detail=detail,
-                       always=always, **s.context(seconds)))
+                       always=always, **s.context(seconds, tokens)))
     answer = wait_answer(ask_id, timeout)
     try:
         os.remove(pending)
@@ -277,14 +372,17 @@ def on_stop(s, data, flags):
     started = s.take_start()
     elapsed = time.time() - started if started is not None else None
     long_turn = elapsed is not None and elapsed >= MIN_SECONDS
+    tokens = turn_tokens(data.get("transcript_path"), started)
     title = "%s finished ✓" % s.name
     message = s.project + (" · %s" % duration_text(elapsed) if elapsed is not None else "")
+    if tokens:
+        message += " · %s" % token_text(tokens)
     # Claude: last_assistant_message; Gemini AfterAgent: prompt_response.
     last = str(data.get("last_assistant_message") or data.get("prompt_response") or "").strip()
 
     if long_turn and "--reply" in flags and last:
         # Orbi logs the ask itself (and your reply) in its Agents list.
-        answer = ask(s, "reply", title, message, last[:3000], REPLY_TIMEOUT, seconds=elapsed)
+        answer = ask(s, "reply", title, message, last[:3000], REPLY_TIMEOUT, seconds=elapsed, tokens=tokens)
         text = str((answer or {}).get("text") or "").strip()
         if (answer or {}).get("action") == "reply" and text:
             # asyncRewake: exit 2 wakes Claude and shows stderr to it.
@@ -295,12 +393,56 @@ def on_stop(s, data, flags):
     if long_turn:
         open_url(build_url("notify", title=title, message=message, app=s.app))
     # Every turn lands in Orbi's Agents list (bubble or not) and ends the "running" state.
-    open_url(build_url("agent/log", title=title, subtitle=message, detail=last[:3000], **s.context(elapsed)))
+    open_url(build_url("agent/log", title=title, subtitle=message, detail=last[:3000],
+                       **s.context(elapsed, tokens)))
     return 0, {}
 
 
+def limit_window(limits, key):
+    """(used %, reset epoch) of one rate-limit window, or (None, None)."""
+    window = limits.get(key) if isinstance(limits, dict) else None
+    if not isinstance(window, dict):
+        return None, None
+    used = window.get("used_percentage")
+    if not isinstance(used, (int, float)):
+        return None, None
+    return max(0.0, min(100.0, float(used))), parse_time(window.get("resets_at"))
+
+
+def on_statusline(s, data, flags):
+    """Claude's status line: plan limits as text, and to Orbi when they change."""
+    limits = data.get("rate_limits")
+    five, five_reset = limit_window(limits, "five_hour")
+    week, week_reset = limit_window(limits, "seven_day")
+    parts = []
+    if five is not None:
+        parts.append("5h %d%%" % round(five))
+    if week is not None:
+        parts.append("7d %d%%" % round(week))
+    if parts:
+        url = build_url("usage", five=round(five) if five is not None else None,
+                        five_reset=int(five_reset) if five_reset else None,
+                        week=round(week) if week is not None else None,
+                        week_reset=int(week_reset) if week_reset else None)
+        last_path = os.path.join(STATE_DIR, "usage.last")
+        try:
+            with open(last_path) as f:
+                changed = f.read() != url
+        except OSError:
+            changed = True
+        if changed:
+            try:
+                os.makedirs(STATE_DIR, exist_ok=True)
+                with open(last_path, "w") as f:
+                    f.write(url)
+            except OSError:
+                pass
+            open_url(url)
+    return 0, " · ".join(parts)
+
+
 EVENTS = {"prompt": on_prompt, "resume": on_resume, "wait": on_wait,
-          "permission": on_permission, "stop": on_stop}
+          "permission": on_permission, "stop": on_stop, "statusline": on_statusline}
 
 
 def main(argv):
@@ -324,7 +466,9 @@ if __name__ == "__main__":
         code, out = main(sys.argv[1:])
     except Exception:
         code, out = 0, {}  # a hook must never break the agent
-    if out is not None:
+    if isinstance(out, str):
+        sys.stdout.write(out + "\n")  # status line text
+    elif out is not None:
         sys.stdout.write(json.dumps(out) + "\n")
     sys.stdout.flush()
     sys.exit(code)

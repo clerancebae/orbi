@@ -83,6 +83,58 @@ class Tests(unittest.TestCase):
                                   "&subtitle=Orbi%20%C2%B7%201%20s&detail=All%20done."
                                   "&session=gemini-s1&agent=Gemini&project=Orbi&seconds=0")
 
+    def test_turn_tokens_from_transcript(self):
+        old = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - 3600))
+        def line(ts, mid, inp, cw, cr, out):
+            return json.dumps({"type": "assistant", "timestamp": ts, "message": {"id": mid, "usage": {
+                "input_tokens": inp, "cache_creation_input_tokens": cw, "cache_read_input_tokens": cr,
+                "output_tokens": out}}})
+        transcript = os.path.join(self.tmp, "t.jsonl")
+        self.run_hook("claude", "prompt", S1)
+        now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() + 1))
+        with open(transcript, "w") as f:
+            f.write("\n".join([
+                line(old, "m0", 9, 9, 9, 9000),           # previous turn: not counted
+                json.dumps({"type": "user", "timestamp": now, "message": {"content": "hi"}}),
+                line(now, "m1", 10, 2000, 50000, 300),     # cache reads left out
+                line(now, "m1", 10, 2000, 50000, 300),     # same response on a second line: once
+                line(now, "m2", 5, 0, 52000, 9685),
+                "not json"]) + "\n")
+        code, out, urls = self.run_hook("claude", "stop", dict(S1, transcript_path=transcript))
+        self.assertIn("tokens=12000", urls[0])
+        self.assertIn("subtitle=Orbi%20%C2%B7%201%20s%20%C2%B7%2012k%20tokens", urls[0])
+        # No transcript → no tokens, still logged.
+        self.run_hook("claude", "prompt", S1)
+        code, out, urls = self.run_hook("claude", "stop", dict(S1, transcript_path="/nope"))
+        self.assertNotIn("tokens", urls[0])
+
+    def test_gemini_turn_tokens(self):
+        old = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - 3600))
+        self.run_hook("gemini", "prompt", S1)
+        now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() + 1))
+        transcript = os.path.join(self.tmp, "session.json")
+        with open(transcript, "w") as f:
+            json.dump({"sessionId": "s1", "messages": [
+                {"type": "gemini", "timestamp": old, "tokens": {"input": 9000, "output": 9, "cached": 0}},
+                {"type": "user", "timestamp": now, "content": "hi"},
+                {"type": "gemini", "timestamp": now, "tokens": {"input": 7000, "output": 500, "cached": 4000,
+                                                                "thoughts": 500, "total": 8000}},
+            ]}, f, indent=2)
+        code, out, urls = self.run_hook("gemini", "stop", dict(S1, transcript_path=transcript))
+        self.assertIn("tokens=4000", urls[0])
+
+    def test_statusline_prints_limits_and_sends_changes_once(self):
+        data = dict(S1, rate_limits={"five_hour": {"used_percentage": 23.4, "resets_at": 1793000000},
+                                     "seven_day": {"used_percentage": 41, "resets_at": "2026-11-09T09:00:00Z"}})
+        code, out, urls = self.run_hook("claude", "statusline", data)
+        self.assertEqual(out, "5h 23% · 7d 41%")
+        self.assertEqual(urls, ["orbi://usage?five=23&five_reset=1793000000&week=41&week_reset=1794214800"])
+        self.assertEqual(self.run_hook("claude", "statusline", data)[2], [])  # unchanged → not sent again
+        data["rate_limits"]["five_hour"]["used_percentage"] = 24
+        self.assertEqual(len(self.run_hook("claude", "statusline", data)[2]), 1)
+        # API-key users have no rate_limits: empty line, nothing sent.
+        self.assertEqual(self.run_hook("claude", "statusline", S1)[1:], ("", []))
+
     def test_host_app_and_idle(self):
         code, out, urls = self.run_hook("claude", "prompt", S1, __CFBundleIdentifier="com.microsoft.VSCode")
         self.assertIn("app=com.microsoft.VSCode", urls[0])

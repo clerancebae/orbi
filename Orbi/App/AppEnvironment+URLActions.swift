@@ -50,6 +50,8 @@ extension AppEnvironment {
             agentLog.start(context)
         case let .agentStop(session):
             agentLog.stop(session: session)
+        case let .usage(limits):
+            agentLog.setLimits(limits)
         case .capture:
             Self.urlLog.info("orbi://capture arrives with the quick-capture panel (Phase 4)")
         }

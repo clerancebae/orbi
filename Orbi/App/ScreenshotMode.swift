@@ -47,8 +47,10 @@ enum ScreenshotMode {
         let terminal = "com.apple.Terminal"
         // Earlier today.
         for (project, minutes) in [("web", 34), ("api", 51), ("orbi", 23), ("api", 18)] {
-            log.finishTurn(AgentContext(project: project, seconds: minutes * 60))
+            log.finishTurn(AgentContext(project: project, seconds: minutes * 60, tokens: minutes * 2_400))
         }
+        log.setLimits(UsageLimits(fiveHour: 38, fiveHourReset: now.addingTimeInterval(2 * 3600), week: 74,
+                                  weekReset: now.addingTimeInterval(3 * 86_400), updated: now))
         log.add(AgentEvent(id: "s1", date: now.addingTimeInterval(-95 * 60), kind: .finished,
                            title: "Claude finished ✓", subtitle: "web · 34 min",
                            detail: "Migrated the settings page to the new design system. Screenshots are in the PR.",

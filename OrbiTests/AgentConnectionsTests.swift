@@ -37,6 +37,25 @@ struct AgentHookConfigTests {
         #expect(AgentHookConfig.disconnect(["model": "x"])["model"] as? String == "x")
     }
 
+    @Test func claudeStatusLineAddedButUsersOwnIsKept() {
+        let s = AgentHookConfig.connect(userSettings, kind: .claude, script: script)
+        #expect((s["statusLine"] as? [String: Any])?["command"] as? String
+                == "/usr/bin/python3 -I '\(script)' claude statusline")
+        #expect(AgentHookConfig.disconnect(s)["statusLine"] == nil)
+
+        var own = userSettings
+        own["statusLine"] = ["type": "command", "command": "my-line.sh"]
+        let kept = AgentHookConfig.connect(own, kind: .claude, script: script)
+        #expect((kept["statusLine"] as? [String: Any])?["command"] as? String == "my-line.sh")
+        #expect(AgentHookConfig.status(of: kept, kind: .claude, script: script) == .connected)
+        #expect((AgentHookConfig.disconnect(kept)["statusLine"] as? [String: Any])?["command"] as? String == "my-line.sh")
+
+        // Hooks from before the status line existed: outdated, so launch repair adds it.
+        var old = s
+        old["statusLine"] = nil
+        #expect(AgentHookConfig.status(of: old, kind: .claude, script: script) == .outdated)
+    }
+
     @Test func oldScriptPathIsOutdated() {
         let old = AgentHookConfig.connect([:], kind: .claude, script: "/Users/me/Orbi/mcp/agent_hook.py")
         #expect(AgentHookConfig.status(of: old, kind: .claude, script: script) == .outdated)

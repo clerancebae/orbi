@@ -47,6 +47,8 @@ struct AgentDayStats: Codable, Equatable, Sendable {
     var allowed = 0
     var denied = 0
     var replies = 0
+    /// Optional so logs written before token counting still decode.
+    var tokens: Int?
 }
 
 /// What AI agents did and are doing. Events: newest first, last 100. Day stats: last 30 days.
@@ -69,6 +71,8 @@ final class AgentLogStore {
     /// Sessions whose turn ended and you haven't looked yet: it's your turn. Cleared by the
     /// session's next prompt, by answering its reply bubble, or by opening the panel.
     private(set) var finishedUnseen: Set<String> = []
+    /// Latest Claude plan limits (from the status line hook); nil until one arrives.
+    private(set) var limits: UsageLimits?
 
     /// Agents waiting on you: open questions plus finished turns you haven't seen.
     var waitingForYou: Int { openAsks.count + finishedUnseen.count }
@@ -145,8 +149,15 @@ final class AgentLogStore {
         updateToday { stats in
             stats.turns += 1
             stats.seconds += context.seconds ?? 0
+            if let tokens = context.tokens, tokens > 0 { stats.tokens = (stats.tokens ?? 0) + tokens }
             if let project = context.project, !stats.projects.contains(project) { stats.projects.append(project) }
         }
+        save()
+    }
+
+    func setLimits(_ new: UsageLimits) {
+        guard new != limits else { return }
+        limits = new
         save()
     }
 
@@ -184,6 +195,7 @@ final class AgentLogStore {
     private struct File: Codable {
         var events: [AgentEvent]
         var days: [String: AgentDayStats]?
+        var limits: UsageLimits?
     }
 
     private static let encoder: JSONEncoder = {
@@ -203,6 +215,7 @@ final class AgentLogStore {
         if let file = try? Self.decoder.decode(File.self, from: data) {
             events = file.events
             days = file.days ?? [:]
+            limits = file.limits
         } else if let old = try? Self.decoder.decode([AgentEvent].self, from: data) {
             events = old  // first version: a bare array
         } else {
@@ -215,7 +228,7 @@ final class AgentLogStore {
         do {
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)
-            try Self.encoder.encode(File(events: events, days: days)).write(to: fileURL, options: .atomic)
+            try Self.encoder.encode(File(events: events, days: days, limits: limits)).write(to: fileURL, options: .atomic)
         } catch {
             log.error("Saving agent-log.json failed: \(error.localizedDescription, privacy: .public)")
         }

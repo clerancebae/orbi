@@ -45,6 +45,20 @@ enum OrbiAction: Equatable, Sendable {
     case agentStart(AgentContext)
     /// The session's turn ended or it went idle (e.g. interrupted).
     case agentStop(session: String)
+    /// Claude plan limits from the status line hook: % used of the 5-hour and weekly windows.
+    case usage(UsageLimits)
+}
+
+/// Claude.ai plan limits as Claude Code reports them (`rate_limits` in the status line input).
+struct UsageLimits: Codable, Equatable, Sendable {
+    /// % used of the 5-hour window, and when it resets.
+    var fiveHour: Int?
+    var fiveHourReset: Date?
+    /// % used of the weekly window, and when it resets.
+    var week: Int?
+    var weekReset: Date?
+    /// When Orbi received it.
+    var updated: Date
 }
 
 /// Who is talking: which agent session, project and host app (for "go to project").
@@ -56,6 +70,8 @@ struct AgentContext: Equatable, Sendable {
     var app: String?
     /// Length of the finished turn, for the daily summary.
     var seconds: Int?
+    /// Tokens the finished turn used (input + cache writes + output), for the daily summary.
+    var tokens: Int? = nil
 
     static let none = AgentContext()
 }
@@ -124,6 +140,7 @@ enum URLRouter {
                 detail: query["detail"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                     .map { String($0.prefix(maxAskDetailLength)) },
                 context: parseContext(query)))
+        case "usage": return parseUsage(query)
         case "ask/cancel":
             guard let id = query["id"], isValidAskID(id) else { return .failure(.invalidParameter("id")) }
             return .success(.askCancel(id: id))
@@ -223,7 +240,20 @@ enum URLRouter {
             agent: text("agent", 40),
             project: text("project", 120),
             app: plain("app", max: 155, extra: [".", "-"]),
-            seconds: query["seconds"].flatMap(Int.init).flatMap { (0...86_400).contains($0) ? $0 : nil })
+            seconds: query["seconds"].flatMap(Int.init).flatMap { (0...86_400).contains($0) ? $0 : nil },
+            tokens: query["tokens"].flatMap(Int.init).flatMap { (0...1_000_000_000).contains($0) ? $0 : nil })
+    }
+
+    /// `usage?five=23&five_reset=<epoch>&week=41&week_reset=<epoch>`; at least one percentage.
+    private static func parseUsage(_ query: [String: String]) -> Result<OrbiAction, RouteError> {
+        func percent(_ key: String) -> Int? { query[key].flatMap(Int.init).flatMap { (0...100).contains($0) ? $0 : nil } }
+        func date(_ key: String) -> Date? {
+            query[key].flatMap(TimeInterval.init).flatMap { $0 > 0 ? Date(timeIntervalSince1970: $0) : nil }
+        }
+        let five = percent("five"), week = percent("week")
+        guard five != nil || week != nil else { return .failure(.missingParameter("five")) }
+        return .success(.usage(UsageLimits(fiveHour: five, fiveHourReset: date("five_reset"),
+                                           week: week, weekReset: date("week_reset"), updated: .now)))
     }
 
     /// "today", "tomorrow" or "YYYY-MM-DD".

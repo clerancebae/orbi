@@ -133,6 +133,16 @@ struct NotifyRouteTests {
         #expect(parse("orbi://agent/log?title=t&seconds=420&project=api")
                 == .success(.agentLog(title: "t", subtitle: nil, detail: nil,
                                       context: AgentContext(project: "api", seconds: 420))))
+        #expect(parse("orbi://agent/log?title=t&tokens=12500")
+                == .success(.agentLog(title: "t", subtitle: nil, detail: nil, context: AgentContext(tokens: 12500))))
+        #expect(parse("orbi://usage") == .failure(.missingParameter("five")))
+        #expect(parse("orbi://usage?five=150") == .failure(.missingParameter("five")))
+        guard case let .success(.usage(limits)) = parse("orbi://usage?five=23&five_reset=1793000000&week=41")
+        else { Issue.record("usage not parsed"); return }
+        #expect(limits.fiveHour == 23)
+        #expect(limits.fiveHourReset == Date(timeIntervalSince1970: 1_793_000_000))
+        #expect(limits.week == 41)
+        #expect(limits.weekReset == nil)
         #expect(parse("orbi://notify?title=x&app=com.microsoft.VSCode")
                 == .success(.notify(title: "x", message: nil, sticky: false, app: "com.microsoft.VSCode")))
     }

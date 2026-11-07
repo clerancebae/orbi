@@ -26,6 +26,23 @@ struct AgentLogStoreTests {
         #expect(store.events.count == 1)
     }
 
+    @Test func tokensAndLimitsAreKept() throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "agent-log-tokens-\(UUID()).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = AgentLogStore(fileURL: url)
+        store.finishTurn(AgentContext(session: "a", tokens: 12_000))
+        store.finishTurn(AgentContext(session: "a"))
+        store.finishTurn(AgentContext(session: "a", tokens: 500))
+        #expect(store.today.tokens == 12_500)
+        let limits = UsageLimits(fiveHour: 23, fiveHourReset: Date(timeIntervalSince1970: 1_793_000_000),
+                                 week: 41, weekReset: nil, updated: Date(timeIntervalSince1970: 1_792_990_000))
+        store.setLimits(limits)
+        let reopened = AgentLogStore(fileURL: url)
+        #expect(reopened.today.tokens == 12_500)
+        #expect(reopened.limits == limits)
+        #expect(AgentsSection.summary(reopened.today)?.contains("13k tokens") == true)
+    }
+
     @Test func persistsAcrossLaunches() throws {
         let url = FileManager.default.temporaryDirectory.appending(path: "agent-log-\(UUID()).json")
         defer { try? FileManager.default.removeItem(at: url) }

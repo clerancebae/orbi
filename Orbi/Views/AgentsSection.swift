@@ -8,17 +8,15 @@ struct AgentsSection: View {
     @State private var expanded: Set<String> = []
     @State private var showAll = false
 
-    private static let collapsedCount = 4
+    private static let collapsedCount = 3
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Label("Agents", systemImage: "sparkles").font(.subheadline.weight(.semibold))
                 Spacer()
-                if !store.events.isEmpty {
-                    Button("Clear") { store.clear(); expanded.removeAll() }
-                        .buttonStyle(.link)
-                        .font(.caption)
+                if let limits = store.limits {
+                    LimitsView(limits: limits)
                 }
             }
 
@@ -54,28 +52,37 @@ struct AgentsSection: View {
                 rows(Array(store.events.prefix(Self.collapsedCount)))
             }
 
+            // Clear only in the full list: rarely needed, so it stays out of the header.
             if store.events.count > Self.collapsedCount {
-                Button(showAll ? "Show less" : "Show all \(store.events.count)") { showAll.toggle() }
-                    .buttonStyle(.link)
-                    .font(.caption)
+                HStack {
+                    Button(showAll ? "Show less" : "Show all \(store.events.count)") { showAll.toggle() }
+                    Spacer()
+                    if showAll {
+                        Button("Clear") { store.clear(); expanded.removeAll(); showAll = false }
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .font(.caption)
             }
         }
     }
 
-    /// "Today: 2 h 10 min across 3 projects · 14 turns · 12 approved, 1 denied · 3 replies"
+    /// "Today: 2h 10m · 14 turns · 230k tokens". Approvals and replies show on the rows themselves.
     static func summary(_ s: AgentDayStats) -> String? {
-        guard s.turns > 0 || s.allowed + s.denied + s.replies > 0 else { return nil }
+        guard s.turns > 0 else { return nil }
         var parts: [String] = []
-        if s.seconds >= 60 {
-            let projects = s.projects.count > 1 ? " across \(s.projects.count) projects" : ""
-            parts.append("\(DurationText.minutes(DurationText.floorMinutes(s.seconds)))\(projects)")
-        }
-        if s.turns > 0 { parts.append(s.turns == 1 ? "1 turn" : "\(s.turns) turns") }
-        if s.allowed + s.denied > 0 {
-            parts.append(s.denied > 0 ? "\(s.allowed) approved, \(s.denied) denied" : "\(s.allowed) approved")
-        }
-        if s.replies > 0 { parts.append(s.replies == 1 ? "1 reply" : "\(s.replies) replies") }
+        if s.seconds >= 60 { parts.append(DurationText.minutes(DurationText.floorMinutes(s.seconds))) }
+        parts.append(s.turns == 1 ? "1 turn" : "\(s.turns) turns")
+        if let tokens = s.tokens, tokens > 0 { parts.append(tokenText(tokens)) }
         return "Today: " + parts.joined(separator: " · ")
+    }
+
+    /// "850 tokens", "12k tokens", "1.4M tokens".
+    static func tokenText(_ n: Int) -> String {
+        if n >= 1_000_000 { return String(format: "%.1fM tokens", Double(n) / 1_000_000) }
+        if n >= 1000 { return "\(Int((Double(n) / 1000).rounded()))k tokens" }
+        return "\(n) tokens"
     }
 
     private func rows(_ events: [AgentEvent]) -> some View {
@@ -87,30 +94,88 @@ struct AgentsSection: View {
     }
 }
 
-/// A session in the middle of a turn: "Claude · Orbi · working 4 min".
+/// Claude plan limits, in the section header: "5h ▬▬▭ 60% · Week ▬▬▬ 81%" (what's left). Reset times on hover.
+private struct LimitsView: View {
+    let limits: UsageLimits
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let used = shown(limits.fiveHour, reset: limits.fiveHourReset) {
+                gauge("5h", used: used, reset: limits.fiveHourReset)
+            }
+            if let used = shown(limits.week, reset: limits.weekReset) {
+                gauge("Week", used: used, reset: limits.weekReset)
+            }
+        }
+        .font(.caption)
+    }
+
+    /// A window that has reset since the last report is back to 0 % used.
+    private func shown(_ used: Int?, reset: Date?) -> Int? {
+        guard let used else { return nil }
+        if let reset, reset < .now { return 0 }
+        return used
+    }
+
+    private func gauge(_ title: String, used: Int, reset: Date?) -> some View {
+        HStack(spacing: 5) {
+            Text(title).foregroundStyle(.secondary)
+            Capsule().fill(.quaternary)
+                .overlay(alignment: .leading) {
+                    GeometryReader { g in
+                        Capsule().fill(color(used)).frame(width: g.size.width * CGFloat(100 - used) / 100)
+                    }
+                }
+                .frame(width: 40, height: 4)
+            Text("\(100 - used)%").monospacedDigit()
+        }
+        .help(helpText(title, used: used, reset: reset))
+    }
+
+    private func color(_ used: Int) -> Color { used >= 90 ? .red : used >= 70 ? .orange : .green }
+
+    /// "5h: 60% left, resets 14:30" (or "Mon 09:00" when it's not today).
+    private func helpText(_ title: String, used: Int, reset: Date?) -> String {
+        var text = "Claude \(title): \(100 - used)% left"
+        if let reset, reset > .now {
+            let style: Date.FormatStyle = Calendar.current.isDateInToday(reset)
+                ? .dateTime.hour().minute() : .dateTime.weekday(.abbreviated).hour().minute()
+            text += ", resets \(reset.formatted(style))"
+        }
+        return text
+    }
+}
+
+/// A session in the middle of a turn: "orbi · working 4m" (like the event rows; the agent name on hover).
 private struct RunningRow: View {
     let agent: RunningAgent
+    @State private var hovering = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             ProgressView().controlSize(.mini).frame(width: 16)
-            Text([agent.agent, agent.project].compactMap { $0 }.joined(separator: " · "))
-                .font(.callout).lineLimit(1)
             // Static minutes (refreshed whenever the panel re-renders), not a per-second timer.
-            Text("working " + DurationText.minutes(max(1, DurationText.floorMinutes(Int(Date.now.timeIntervalSince(agent.startedAt))))))
-                .font(.caption).foregroundStyle(.secondary).monospacedDigit().lineLimit(1)
+            let minutes = max(1, DurationText.floorMinutes(Int(Date.now.timeIntervalSince(agent.startedAt))))
+            (Text(agent.project ?? agent.agent)
+                + Text(" · working \(DurationText.minutes(minutes))").foregroundStyle(.secondary))
+                .font(.callout).monospacedDigit().lineLimit(1)
             Spacer(minLength: 4)
-            if let app = agent.app {
+            if hovering, let app = agent.app {
                 GoToAppButton(bundleID: app)
             }
         }
+        .help(agent.agent)
+        .onHover { hovering = $0 }
     }
 }
 
+/// One line per event: "✓ api · Fixed the flaky login test…   7m". Click for the full text;
+/// ↗ shows on hover.
 private struct AgentEventRow: View {
     let event: AgentEvent
     let isExpanded: Bool
     let toggle: () -> Void
+    @State private var hovering = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -119,27 +184,30 @@ private struct AgentEventRow: View {
                     Image(systemName: event.kind == .permission ? "lock.shield" : "checkmark.bubble")
                         .foregroundStyle(.secondary)
                         .frame(width: 16)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(event.title).font(.callout).lineLimit(1)
-                        Text(secondLine).font(.caption).foregroundStyle(.secondary).lineLimit(isExpanded ? nil : 1)
-                    }
+                    Text(line).font(.callout).lineLimit(1)
                     Spacer(minLength: 4)
                     if let badge {
                         Text(badge.text)
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(badge.color)
+                    } else {
+                        Text(Self.shortAge(event.date))
+                            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }
-                    if let app = event.app {
+                    if hovering, let app = event.app {
                         GoToAppButton(bundleID: app)
                     }
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(isExpanded ? "Hide details" : "Show details")
+            .help(isExpanded ? "Hide details" : event.title)
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 6) {
+                    Text([event.title, event.subtitle, Self.relativeTime(event.date)].compactMap { $0 }
+                        .joined(separator: " · "))
+                        .font(.caption).foregroundStyle(.secondary)
                     if let detail = event.detail {
                         ScrollView {
                             Text(event.kind == .permission ? AttributedString(detail) : Self.markdown(detail))
@@ -162,22 +230,34 @@ private struct AgentEventRow: View {
                 .padding(.leading, 22)
             }
         }
+        .onHover { hovering = $0 }
     }
 
-    private var secondLine: String {
-        let time = Self.relativeTime(event.date)
-        let preview = isExpanded ? nil : event.detail.map { Self.oneLine($0) }
-        return [event.subtitle, time, preview].compactMap { $0 }.joined(separator: " · ")
+    /// "api · Fixed the flaky login test…": the project (first part of the subtitle) and the text.
+    private var line: String {
+        let project = event.subtitle?.components(separatedBy: " · ").first
+        let text = event.detail.map { Self.oneLine($0) } ?? event.title
+        return [project, text].compactMap { $0 }.joined(separator: " · ")
     }
 
+    /// Only a denial is coloured; the rest stays quiet.
     private var badge: (text: String, color: Color)? {
         switch event.outcome {
-        case .allowed: ("Allowed", .green)
+        case .allowed: ("Allowed", .secondary)
         case .denied: ("Denied", .red)
         case .terminal, .elsewhere: ("Terminal", .secondary)
-        case .replied: ("Replied", .accentColor)
+        case .replied: ("Replied", .secondary)
         case .dismissed, nil: nil
         }
+    }
+
+    /// "now", "12m", "3h", "2d".
+    static func shortAge(_ date: Date, now: Date = .now) -> String {
+        let minutes = Int(max(0, now.timeIntervalSince(date)) / 60)
+        if minutes < 1 { return "now" }
+        if minutes < 60 { return "\(minutes)m" }
+        if minutes < 24 * 60 { return "\(minutes / 60)h" }
+        return "\(minutes / (24 * 60))d"
     }
 
     /// "just now" for the first minute (the plain formatter says "in 0 sec." for a fresh event).
