@@ -19,7 +19,7 @@ Works with any agent whose hooks send JSON on stdin (session_id, cwd):
 - permission: an Allow / Deny / Terminal bubble (plus Always when Claude suggests a "don't ask again"
   rule; it applies those rules via `updatedPermissions`). Allow or Deny is returned as the hook decision;
   Terminal, ✕ or a timeout returns nothing, so the normal terminal prompt applies.
-- prompt: marks the session as running (menu bar 🤖) and closes this session's open bubbles.
+- prompt: marks the session as running (dashed orbit in the menu bar) and closes this session's open bubbles.
 - wait: a sticky "needs you" bubble until the agent continues. `idle_prompt` instead ends the running
   state (covers turns interrupted with Esc, where Stop doesn't fire). Auth notices are ignored.
 - stop also counts the turn's tokens from the transcript (Claude: input + cache writes + output; Gemini:

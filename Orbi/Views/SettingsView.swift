@@ -40,7 +40,7 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Warn when a Claude plan limit passes 80% and 95%", isOn: $settings.limitWarnings)
                 Text("Adds Orbi's hooks to the agent's settings.json (your own hooks stay; a backup is kept): "
-                     + "permission and reply bubbles, 🤖 in the menu bar, the Agents list.")
+                     + "permission and reply bubbles, the orbit in the menu bar, the Agents list.")
                     .font(.caption).foregroundStyle(.secondary)
                 if agents.availableAgents.contains(.codex) || agents.availableAgents.contains(.opencode) {
                     Text("Codex and OpenCode: running and finished turns only (no permission or reply bubbles). "

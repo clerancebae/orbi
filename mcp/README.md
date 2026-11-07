@@ -32,11 +32,11 @@ One hook script for every agent CLI: `/usr/bin/python3 -I /path/to/Orbi/mcp/agen
 
 | Event | What you see | Claude Code | Gemini CLI |
 |---|---|---|---|
-| `prompt` | 🤖 in the menu bar while the turn runs (`orbi://agent/start`), closes open bubbles | `UserPromptSubmit` | `BeforeAgent` |
+| `prompt` | dashed orbit in the menu bar while the turn runs (`orbi://agent/start`), closes open bubbles | `UserPromptSubmit` | `BeforeAgent` |
 | `stop` | every turn is logged in the Agents list (`orbi://agent/log`); turns ≥ 60 s (`ORBI_AGENT_MIN_SECONDS`) also get a "finished ✓" bubble | `Stop` | `AfterAgent` |
 | `stop --reply` | the same, plus Claude's last message and a reply field | `Stop` with `"asyncRewake": true` | – |
 | `permission` | the command with Allow / Deny / Terminal | `PermissionRequest` | – |
-| `wait` | sticky "needs you" until the agent continues; `idle_prompt` ends the 🤖 state (interrupted turns) | `Notification` (`elicitation_dialog\|agent_needs_input\|idle_prompt`) | `Notification` |
+| `wait` | sticky "needs you" until the agent continues; `idle_prompt` ends the working state (interrupted turns) | `Notification` (`elicitation_dialog\|agent_needs_input\|idle_prompt`) | `Notification` |
 | `resume` | closes bubbles answered in the terminal | `PostToolUse` (behind a shell guard) | `AfterTool` |
 
 How it works: the hook opens `orbi://ask?id=…`, Orbi shows the bubble and writes the answer to `~/Library/Application Support/Orbi/answers/<id>.json`, and the waiting hook returns it. A permission answer becomes the hook's `allow`/`deny` decision; ✕, **Terminal** or a 10-minute timeout fall back to the normal terminal prompt. A reply makes the async `Stop` hook exit 2 with the text, which wakes Claude.
@@ -53,6 +53,6 @@ Claude Code (`~/.claude/settings.json`), with `H` = `/usr/bin/python3 -I /path/t
 ```
 The `PostToolUse` guard is plain shell, so Python only starts while a bubble is open.
 
-Every agent URL carries `session`, `agent`, `project`, `app` (the terminal / IDE bundle id, from `__CFBundleIdentifier` or `TERM_PROGRAM`) and, when a turn ends, `seconds`. Orbi uses them for the 🤖 indicator, the ↗ "go to app" button and the daily summary.
+Every agent URL carries `session`, `agent`, `project`, `app` (the terminal / IDE bundle id, from `__CFBundleIdentifier` or `TERM_PROGRAM`) and, when a turn ends, `seconds`. Orbi uses them for the menu bar orbit, the ↗ "go to app" button and the daily summary.
 
 Gemini CLI uses `prompt`, `stop`, `wait` and `resume` (`BeforeAgent`, `AfterAgent`, `Notification`, `AfterTool`; timeouts in ms). Codex: same as Claude's `UserPromptSubmit`/`Stop` in `~/.codex/hooks.json` (needs `[features] codex_hooks = true`), agent name `codex`. OpenCode: a plugin (`~/.config/opencode/plugins/orbi.js`, written by Settings → AI agents) calls `opencode prompt|stop`. A message queued in Orbi (`queue/<session>.txt`) is sent by Claude's `stop` as the next prompt. Tests: `/usr/bin/python3 -I mcp/test_agent_hook.py`.

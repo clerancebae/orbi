@@ -11,7 +11,7 @@
 <p align="center">
   Hand Claude Code a task and switch away: when it needs permission or finishes, a bubble drops from the menu bar
   so you can approve or send the next instruction without going back to the terminal.
-  A 🤖 shows who's working, and the panel keeps a log of everything your agent did today.
+  The menu bar orbit shows when an agent is working and when it's your turn, and the panel keeps a log of everything your agent did today.
 </p>
 
 <p align="center">
@@ -52,7 +52,7 @@ Working with agents means a lot of waiting and a lot of window switching. You st
 - **Codex and OpenCode.** One-click connect for running and finished turns, next to Claude Code and Gemini CLI.
 - **Daily summary.** "Today: 2h 10m across 3 projects · 14 turns · 12 approved · 3 replies", at the top of the Agents list and in `get_status`.
 - **See what your agent did.** The **Agents** list at the top of Orbi's panel keeps every finished turn (with Claude's last message), every permission request (with your answer) and your replies. Click a row to read it in full, or ask your agent "what did you do today?" over MCP.
-- **"Agent finished" bubble.** A small bubble under the menu bar icon when Claude Code, Gemini CLI or Codex finishes a turn longer than a minute: *"Claude finished ✓ · my-project · 7 min"*. Short replies stay quiet.
+- **"Agent finished" bubble.** A small bubble under the menu bar icon when Claude Code, Gemini CLI, Codex or OpenCode finishes a turn longer than a minute: *"Claude finished ✓ · my-project · 7 min"*. Short replies stay quiet.
 - **MCP server.** Claude (Desktop and Code), Gemini CLI, Cursor, VS Code and any other MCP client can read your day and act on it: "plan my day: API docs 45m, review PR 20m", "start the next task", "save this link for later".
 - **Ping on request.** In chats without hooks (Claude Desktop), say "notify me on Orbi when you're done" and the agent calls the `notify` tool.
 - **Zero-setup server.** One Python file, standard library only, runs on the macOS system Python. It starts only when the agent needs it.
@@ -83,7 +83,7 @@ scripts/install.sh   # Release build → /Applications/Orbi.app → launch
 
 ## Connect your AI agent
 
-Open Orbi's **Settings → AI agents** and click **Connect** next to Claude Code (or Gemini CLI). Orbi adds its hooks to the agent's `settings.json`; your own hooks and settings stay as they are, and a backup is kept as `settings.json.orbi-backup`. **Disconnect** removes only Orbi's entries. The scripts ship inside Orbi.app, so there's nothing else to download.
+Open Orbi's **Settings → AI agents** and click **Connect** next to Claude Code (or Gemini CLI, Codex CLI, OpenCode: these show up once installed). Orbi adds its hooks to the agent's `settings.json` (Codex: `~/.codex/hooks.json` plus `codex_hooks = true` in `config.toml`; OpenCode: a small plugin in `~/.config/opencode/plugins/`); your own hooks and settings stay as they are, and a backup is kept as `settings.json.orbi-backup`. **Disconnect** removes only Orbi's entries. The scripts ship inside Orbi.app, so there's nothing else to download.
 
 To let your agent see your day (MCP), use the **Copy Claude Code command** button in the same section, or **Copy JSON** for Claude Desktop, Cursor, VS Code and other MCP clients. Tools: `get_status`, `add_tasks`, `start_next_task`, `complete_active_task`, `log_water`, `undo_water`, `save_for_later`, `open_next_reading`, `notify`.
 
@@ -93,6 +93,7 @@ Manual setup and details for every hook event are in [mcp/README.md](mcp/README.
 
 ```sh
 open -g "orbi://task/add?title=Review+PR&min=30&date=tomorrow"
+open -g "orbi://task/add?title=Fix+login&project=api"   # starts when an agent works in ./api
 open -g "orbi://task/start-next"
 open -g "orbi://water/add"
 open -g "orbi://reading/save?url=https%3A%2F%2Fexample.com"
