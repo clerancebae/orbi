@@ -103,7 +103,9 @@ final class AppEnvironment {
         #if DEBUG
         // Debug-only: `open Orbi.app --args -OrbiDemoBubble` shows the bubble with a
         // throwaway in-memory task, for checking its look without waiting for a real timer.
-        if ScreenshotMode.isOn {
+        if MenuBarDemo.isOn {
+            MenuBarDemo.shared.start()
+        } else if ScreenshotMode.isOn {
             ScreenshotMode.run(self)
         } else if demoBubble, let task = taskStore.add(title: "Write API docs", estimatedMinutes: 5) {
             taskStore.start(task)
@@ -175,7 +177,7 @@ final class AppEnvironment {
     private static func isDemoMode() -> Bool {
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
-        return args.contains("-OrbiDemoBubble") || args.contains("-OrbiScreenshots")
+        return args.contains("-OrbiDemoBubble") || args.contains("-OrbiScreenshots") || args.contains("-OrbiMenuBarDemo")
         #else
         false
         #endif

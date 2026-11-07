@@ -45,15 +45,38 @@ struct MenuBarLabel: View {
     let appearance: MenuBarAppearance
 
     var body: some View {
+        let state = displayState
+        let text = displayText
+
+        HStack(spacing: 5) {
+            // .original for the coloured states: the menu bar label would otherwise render the
+            // image as a template, i.e. monochrome, and the blue / orange would be lost.
+            Image(nsImage: MenuBarIcon.image(for: state, darkMenuBar: appearance.isDark))
+                .renderingMode(state.isColored ? .original : .template)
+            if !text.isEmpty { Text(text) }
+        }
+        .accessibilityLabel("Orbi")
+    }
+
+    private var displayState: MenuBarIconState {
+        #if DEBUG
+        if let demo = MenuBarDemo.shared.state { return demo }
+        #endif
         let active = tasks.activeTask
-        let state = MenuBarIconState.current(
+        return MenuBarIconState.current(
             agentsRunning: agents.running.count, agentsWaiting: agents.openAsks.count,
             remainingSeconds: active.flatMap { tasks.remainingSeconds($0) },
             estimateSeconds: active?.estimatedMinutes.map { $0 * 60 })
+    }
+
+    private var displayText: String {
+        #if DEBUG
+        if let demo = MenuBarDemo.shared.state { return "demo: \(demo.demoName)" }
+        #endif
         let waterText: String? = settings.showWater
             ? MenuBarText.water(count: water.todayCount, goal: settings.waterGoal, reminderDue: reminders.isDue)
             : nil
-        let mainText: String? = if let active {
+        let mainText: String? = if let active = tasks.activeTask {
             MenuBarText.activeTask(title: active.title, remainingSeconds: tasks.remainingSeconds(active),
                                    elapsedSeconds: tasks.elapsedSeconds(active))
         } else if let event = calendar.nextEvent {
@@ -61,12 +84,6 @@ struct MenuBarLabel: View {
         } else {
             nil
         }
-        let text = MenuBarText.compose([mainText, waterText])
-
-        HStack(spacing: 5) {
-            Image(nsImage: MenuBarIcon.image(for: state, darkMenuBar: appearance.isDark))
-            if !text.isEmpty { Text(text) }
-        }
-        .accessibilityLabel("Orbi")
+        return MenuBarText.compose([mainText, waterText])
     }
 }
