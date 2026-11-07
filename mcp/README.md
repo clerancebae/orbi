@@ -12,6 +12,7 @@ Claude starts it on demand over stdio; it uses nothing while idle.
 | `start_next_task`, `complete_active_task` | Task timer control | `orbi://task/start-next`, `task/complete` |
 | `log_water`, `undo_water` | Water | `orbi://water/add`, `water/undo` |
 | `save_for_later`, `open_next_reading` | Read later | `orbi://reading/save`, `reading/open-next` |
+| `notify` | Show a bubble under the menu bar icon (e.g. "Claude finished ✓" when asked to ping at the end) | `orbi://notify` (doesn't wait for `status.json`) |
 
 Actions open URLs with `open -g` (nothing comes to the front), then wait up to 2.5 s for Orbi to rewrite `status.json` and return the new state, so Claude can confirm what happened.
 

@@ -249,6 +249,21 @@ def tool_save_for_later(args):
     return "Saved for later: %s\n\n%s" % (url, summarize(status) if status else "")
 
 
+def tool_notify(args):
+    title = (args.get("title") or "").strip()[:120]
+    message = (args.get("message") or "").strip()[:240]
+    if not title and not message:
+        raise ToolError("title or message is required")
+    target = orbi_url("notify", title=title or None, message=message or None)
+    if DRY_RUN:
+        return "Dry run, would open: " + target
+    # No status change to wait for: the bubble isn't part of status.json.
+    result = subprocess.run(["/usr/bin/open", "-g", target], capture_output=True, text=True, timeout=10)
+    if result.returncode != 0:
+        raise ToolError("Could not reach Orbi: %s" % (result.stderr.strip() or "open failed"))
+    return "Showed an Orbi bubble: %s" % (title or message)
+
+
 TASK_ITEM_SCHEMA = {
     "type": "object",
     "properties": {
@@ -334,6 +349,23 @@ TOOLS = [
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
         "annotations": {"title": "Open next read-later item", "destructiveHint": False},
         "handler": simple_action("reading/open-next", "Opened the next read-later item."),
+    },
+    {
+        "name": "notify",
+        "description": "Show a small bubble under Orbi's menu bar icon (closes itself after 10 s, with a sound). "
+                       "Use it when the user asks to be pinged, e.g. at the end of a long answer or task: "
+                       "title like 'Claude finished ✓', message a few words about what's done.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Short title, max 120 chars."},
+                "message": {"type": "string", "description": "Optional detail, max 240 chars."},
+            },
+            "required": ["title"],
+            "additionalProperties": False,
+        },
+        "annotations": {"title": "Show Orbi bubble", "destructiveHint": False},
+        "handler": tool_notify,
     },
 ]
 TOOLS_BY_NAME = {t["name"]: t for t in TOOLS}

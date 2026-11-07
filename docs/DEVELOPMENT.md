@@ -63,3 +63,13 @@ open "orbi://reading/open-next"
 cat ~/Library/Application\ Support/Orbi/status.json
 log stream --predicate 'subsystem == "com.berke.Orbi" AND category == "URLRouter"' --level info
 ```
+
+## Releasing
+Releases are signed with **Developer ID** and **notarized**, so a downloaded Orbi opens without Gatekeeper warnings.
+
+One-time setup:
+1. Xcode → Settings → Accounts → (team) → Manage Certificates → **+** → *Developer ID Application* (Account Holder only).
+2. Create an app-specific password at appleid.apple.com → Sign-In and Security → App-Specific Passwords.
+3. `xcrun notarytool store-credentials orbi-notary --apple-id <apple id> --team-id <team id>` (asks for the password, stores it in the keychain).
+
+Each release: bump `MARKETING_VERSION` in `project.yml`, commit, then `scripts/release.sh` (or `--no-upload` to only build + notarize into `dist/`).

@@ -54,7 +54,7 @@ class Tests(unittest.TestCase):
         self.assertIn("tools", r[0]["result"]["capabilities"])
         names = [t["name"] for t in r[1]["result"]["tools"]]
         self.assertEqual(names, ["get_status", "add_tasks", "start_next_task", "complete_active_task",
-                                 "log_water", "undo_water", "save_for_later", "open_next_reading"])
+                                 "log_water", "undo_water", "save_for_later", "open_next_reading", "notify"])
         for t in r[1]["result"]["tools"]:
             self.assertNotIn("handler", t)
             self.assertEqual(t["inputSchema"]["type"], "object")
@@ -104,6 +104,14 @@ class Tests(unittest.TestCase):
                      call(3, "save_for_later", {"url": "file:///etc/passwd"})])
         self.assertIn("orbi://reading/save?url=https%3A%2F%2Fa.com%2Fx%3Fb%3D1%26c%3D2&title=A",
                       r[1]["result"]["content"][0]["text"])
+        self.assertTrue(r[2]["result"]["isError"])
+
+    def test_notify(self):
+        r = session([INIT,
+                     call(2, "notify", {"title": "Claude finished ✓", "message": "Orbi · 2 min"}),
+                     call(3, "notify", {"title": "  "})])
+        text = r[1]["result"]["content"][0]["text"]
+        self.assertIn("orbi://notify?title=Claude%20finished%20%E2%9C%93&message=Orbi%20%C2%B7%202%20min", text)
         self.assertTrue(r[2]["result"]["isError"])
 
     def test_missing_status_file_is_tool_error(self):

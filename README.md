@@ -5,26 +5,40 @@
 <h1 align="center">Orbi</h1>
 
 <p align="center">
-  A small macOS menu bar companion that keeps your day in orbit:<br>
-  focused tasks, water breaks, read-later links, and a ping when your AI agent is done.
+  <b>The menu bar companion for people who work with AI agents.</b><br>
+  Hand a long task to Claude Code, Codex or Gemini, walk away, and Orbi pings you when it's done.
 </p>
 
 <p align="center">
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-black">
   <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-orange">
+  <img alt="MCP" src="https://img.shields.io/badge/MCP-ready-8A2BE2">
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
 </p>
 
+## Why
+
+Working with agents means a lot of waiting. You start a run, switch to something else, and either keep checking the terminal or forget about it for 20 minutes. Orbi sits in the menu bar and fixes both:
+
+1. **It tells you when the agent is done**, so you can stop watching the terminal.
+2. **It fills the wait with what matters**: your next task, a glass of water, that article you saved.
+3. **Your agent can see your day too.** Ask it to plan your tasks, log water or tell you what you read this week. Orbi speaks MCP.
+
 ## Features
 
-- **Tasks with a timer.** Plan today, start one task, and see the countdown in the menu bar. Type `Write report 25m` to set an estimate. Tasks can be planned for later days.
+### For your AI agents
+- **"Agent finished" bubble.** A small bubble under the menu bar icon when Claude Code, Gemini CLI or Codex finishes a turn longer than a minute: *"Claude finished ✓ · my-project · 7 min"*. Short replies stay quiet.
+- **MCP server.** Claude (Desktop and Code), Gemini CLI, Cursor, VS Code and any other MCP client can read your day and act on it: "plan my day: API docs 45m, review PR 20m", "start the next task", "save this link for later".
+- **Ping on request.** In chats without hooks (Claude Desktop), say "notify me on Orbi when you're done" and the agent calls the `notify` tool.
+- **Zero-setup server.** One Python file, standard library only, runs on the macOS system Python. It starts only when the agent needs it.
+
+### For you, while the agent works
+- **Tasks with a timer.** One active task with a countdown in the menu bar. Type `Write report 25m` to set an estimate. Tasks can be planned for later days.
 - **Water and breaks.** Quiet reminders toward a daily goal. They skip calendar meetings.
 - **Read later.** Save a link, close the tab, and get one gentle nudge a day to actually read it. Finished items are kept, so you can look back at what you read.
-- **Talks to AI assistants (MCP).** Claude, Gemini CLI, Cursor and any other MCP client can read your day and act on it: "plan my day", "log a glass of water", "what did I read this week?"
-- **"Agent finished" bubble.** Start a long task in Claude Code, Gemini CLI or Codex, switch away, and Orbi pops a small bubble when the turn is done (only for turns over a minute).
-- **Scriptable.** Everything is reachable through `orbi://` URLs (Touch Bar tools, Shortcuts, shell scripts). The current state is written to a `status.json` file.
+- **Scriptable.** Everything is reachable through `orbi://` URLs (Shortcuts, shell scripts, CI). The current state is written to a `status.json` file.
 
-Orbi is light by design. It's a sandboxed SwiftUI + SwiftData app with no network access, no accounts and no analytics. It uses almost nothing while idle.
+**Private by design:** a sandboxed SwiftUI + SwiftData app with no network access, no accounts and no analytics. It uses almost nothing while idle.
 
 ## Install
 
@@ -53,7 +67,7 @@ Other clients (Claude Desktop, Gemini CLI, Cursor, VS Code, …):
 { "mcpServers": { "orbi": { "command": "/usr/bin/python3", "args": ["-I", "/path/to/orbi/mcp/orbi_mcp.py"] } } }
 ```
 
-Tools: `get_status`, `add_tasks`, `start_next_task`, `complete_active_task`, `log_water`, `undo_water`, `save_for_later`, `open_next_reading`.
+Tools: `get_status`, `add_tasks`, `start_next_task`, `complete_active_task`, `log_water`, `undo_water`, `save_for_later`, `open_next_reading`, `notify`.
 
 To get the "agent finished" bubble, wire `mcp/agent_hook.py` into your agent's hooks. For Claude Code, add this to `~/.claude/settings.json`:
 
