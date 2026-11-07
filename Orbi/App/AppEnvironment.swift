@@ -26,6 +26,7 @@ final class AppEnvironment {
     let askBubble: AskBubble
     let agentLog: AgentLogStore
     let agentConnections: AgentConnections
+    let menuBarAppearance = MenuBarAppearance()
     /// nil in demo mode, so a throwaway in-memory session never overwrites the real status.json.
     let statusExporter: StatusExporter?
     private var systemObservers: [NSObjectProtocol] = []

@@ -26,22 +26,22 @@ struct TaskInputParserTests {
 
 struct MenuBarTextTests {
     @Test func remainingRoundsUp() {
-        #expect(MenuBarText.activeTask(title: "API docs", remainingSeconds: 23 * 60 - 30, elapsedSeconds: 0) == "🎯 API docs · 23m")
-        #expect(MenuBarText.activeTask(title: "API docs", remainingSeconds: 0, elapsedSeconds: 0) == "🎯 API docs · 0m")
+        #expect(MenuBarText.activeTask(title: "API docs", remainingSeconds: 23 * 60 - 30, elapsedSeconds: 0) == "API docs · 23m")
+        #expect(MenuBarText.activeTask(title: "API docs", remainingSeconds: 0, elapsedSeconds: 0) == "API docs · 0m")
     }
 
     @Test func overtimeShowsPlus() {
-        #expect(MenuBarText.activeTask(title: "API docs", remainingSeconds: -1, elapsedSeconds: 0) == "⏰ API docs · +1m")
-        #expect(MenuBarText.activeTask(title: "API docs", remainingSeconds: -240, elapsedSeconds: 0) == "⏰ API docs · +4m")
+        #expect(MenuBarText.activeTask(title: "API docs", remainingSeconds: -1, elapsedSeconds: 0) == "API docs · +1m")
+        #expect(MenuBarText.activeTask(title: "API docs", remainingSeconds: -240, elapsedSeconds: 0) == "API docs · +4m")
     }
 
     @Test func elapsedWithoutEstimate() {
-        #expect(MenuBarText.activeTask(title: "API docs", remainingSeconds: nil, elapsedSeconds: 125) == "🎯 API docs · 2m")
+        #expect(MenuBarText.activeTask(title: "API docs", remainingSeconds: nil, elapsedSeconds: 125) == "API docs · 2m")
     }
 
     @Test func longTitlesTruncate() {
         let text = MenuBarText.activeTask(title: "Refactor the notification pipeline", remainingSeconds: 60, elapsedSeconds: 0)
-        #expect(text == "🎯 Refactor the noti… · 1m")
+        #expect(text == "Refactor the noti… · 1m")
     }
 
     @Test func hoursFormat() {
@@ -52,12 +52,20 @@ struct MenuBarTextTests {
 }
 
 struct MenuBarAgentsTests {
-    @Test func agentIndicator() {
-        #expect(MenuBarText.agents(running: 0, waiting: 0) == nil)
-        #expect(MenuBarText.agents(running: 1, waiting: 0) == "🤖")
-        #expect(MenuBarText.agents(running: 3, waiting: 0) == "🤖3")
-        #expect(MenuBarText.agents(running: 1, waiting: 1) == "🔔🤖")
-        #expect(MenuBarText.agents(running: 0, waiting: 2) == "🔔🤖")  // turn over, reply bubble open
+    @Test func orbitState() {
+        typealias S = MenuBarIconState
+        #expect(S.current(agentsRunning: 0, agentsWaiting: 0, remainingSeconds: nil, estimateSeconds: nil) == .idle)
+        #expect(S.current(agentsRunning: 2, agentsWaiting: 0, remainingSeconds: nil, estimateSeconds: nil) == .working)
+        // A task with an estimate shows progress in 5% steps (95% → 19 of 20), even while agents work.
+        #expect(S.current(agentsRunning: 1, agentsWaiting: 0, remainingSeconds: 90, estimateSeconds: 1800) == .progress(19))
+        #expect(S.current(agentsRunning: 0, agentsWaiting: 0, remainingSeconds: 1800, estimateSeconds: 1800) == .progress(0))
+        #expect(S.current(agentsRunning: 0, agentsWaiting: 0, remainingSeconds: 0, estimateSeconds: 1800) == .progress(20))
+        #expect(S.current(agentsRunning: 0, agentsWaiting: 0, remainingSeconds: -60, estimateSeconds: 1800) == .over)
+        // Asking wins over everything; an open reply bubble counts even after the turn ended.
+        #expect(S.current(agentsRunning: 0, agentsWaiting: 1, remainingSeconds: -60, estimateSeconds: 1800) == .asking)
+        // No estimate → elapsed only, so no progress: falls back to agent / idle.
+        #expect(S.current(agentsRunning: 0, agentsWaiting: 0, remainingSeconds: nil, estimateSeconds: nil) == .idle)
+        #expect(S.asking.isColored && S.over.isColored && !S.progress(5).isColored && !S.working.isColored)
     }
 
     @Test func daySummary() {

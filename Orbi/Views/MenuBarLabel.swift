@@ -4,16 +4,17 @@ import SwiftUI
 enum MenuBarText {
     static let titleLimit = 18
 
-    /// "🎯 API docs · 23m", "⏰ API docs · +4m" (over estimate), or "🎯 API docs · 12m" (elapsed, no estimate).
+    /// "API docs · 23m", "API docs · +4m" (over the estimate; the orbit turns orange), or
+    /// "API docs · 12m" (elapsed, no estimate). The orbit icon carries the state, so no emoji.
     static func activeTask(title: String, remainingSeconds: Int?, elapsedSeconds: Int) -> String {
         let short = title.truncated(to: titleLimit)
         guard let remaining = remainingSeconds else {
-            return "🎯 \(short) · \(DurationText.minutes(DurationText.floorMinutes(elapsedSeconds)))"
+            return "\(short) · \(DurationText.minutes(DurationText.floorMinutes(elapsedSeconds)))"
         }
         if remaining >= 0 {
-            return "🎯 \(short) · \(DurationText.minutes(DurationText.ceilMinutes(remaining)))"
+            return "\(short) · \(DurationText.minutes(DurationText.ceilMinutes(remaining)))"
         }
-        return "⏰ \(short) · +\(DurationText.minutes(DurationText.ceilMinutes(-remaining)))"
+        return "\(short) · +\(DurationText.minutes(DurationText.ceilMinutes(-remaining)))"
     }
 
     /// "💧5/8", or "🔔💧5/8" while a reminder is waiting for an answer.
@@ -21,16 +22,9 @@ enum MenuBarText {
         (reminderDue ? "🔔💧" : "💧") + "\(count)/\(goal)"
     }
 
-    /// "🤖", "🤖2" (two sessions working), "🔔🤖" (one is waiting for your answer); nil when idle.
-    static func agents(running: Int, waiting: Int) -> String? {
-        guard running > 0 || waiting > 0 else { return nil }
-        let count = max(running, 1)
-        return (waiting > 0 ? "🔔🤖" : "🤖") + (count > 1 ? "\(count)" : "")
-    }
-
-    /// "📅 14:00"
-    static func event(start: Date) -> String {
-        "📅 " + start.formatted(date: .omitted, time: .shortened)
+    /// "Standup 14:00"
+    static func event(title: String, start: Date) -> String {
+        "\(title.truncated(to: titleLimit)) \(start.formatted(date: .omitted, time: .shortened))"
     }
 
     static func compose(_ parts: [String?]) -> String {
@@ -38,8 +32,9 @@ enum MenuBarText {
     }
 }
 
-/// The always-visible menu bar label. Re-renders only when observed state changes
-/// (task ticks ≤ once/min while active, water logged, reminder due, next event changes).
+/// The always-visible menu bar item: the orbit icon (its colour and fill are the status) and a
+/// short text. Re-renders only when observed state changes (task ticks ≤ once/min while
+/// active, agents start/stop/ask, water logged, reminder due, next event changes).
 struct MenuBarLabel: View {
     let tasks: TaskStore
     let water: WaterStore
@@ -47,30 +42,31 @@ struct MenuBarLabel: View {
     let reminders: ReminderScheduler
     let calendar: CalendarService
     let agents: AgentLogStore
+    let appearance: MenuBarAppearance
 
     var body: some View {
+        let active = tasks.activeTask
+        let state = MenuBarIconState.current(
+            agentsRunning: agents.running.count, agentsWaiting: agents.openAsks.count,
+            remainingSeconds: active.flatMap { tasks.remainingSeconds($0) },
+            estimateSeconds: active?.estimatedMinutes.map { $0 * 60 })
         let waterText: String? = settings.showWater
             ? MenuBarText.water(count: water.todayCount, goal: settings.waterGoal, reminderDue: reminders.isDue)
             : nil
-        let agentText = MenuBarText.agents(running: agents.running.count, waiting: agents.openAsks.count)
-        if let active = tasks.activeTask {
-            Text(MenuBarText.compose([
-                agentText,
-                MenuBarText.activeTask(title: active.title,
-                                       remainingSeconds: tasks.remainingSeconds(active),
-                                       elapsedSeconds: tasks.elapsedSeconds(active)),
-                waterText,
-            ]))
+        let mainText: String? = if let active {
+            MenuBarText.activeTask(title: active.title, remainingSeconds: tasks.remainingSeconds(active),
+                                   elapsedSeconds: tasks.elapsedSeconds(active))
         } else if let event = calendar.nextEvent {
-            Text(MenuBarText.compose([agentText, MenuBarText.event(start: event.start), waterText]))
-        } else if let agentText {
-            Text(MenuBarText.compose([agentText, waterText]))
+            MenuBarText.event(title: event.title, start: event.start)
         } else {
-            HStack(spacing: 4) {
-                Image(systemName: "checklist")
-                if let waterText { Text(waterText) }
-            }
-            .accessibilityLabel("Orbi")
+            nil
         }
+        let text = MenuBarText.compose([mainText, waterText])
+
+        HStack(spacing: 5) {
+            Image(nsImage: MenuBarIcon.image(for: state, darkMenuBar: appearance.isDark))
+            if !text.isEmpty { Text(text) }
+        }
+        .accessibilityLabel("Orbi")
     }
 }

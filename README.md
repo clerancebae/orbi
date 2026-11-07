@@ -44,7 +44,7 @@ Working with agents means a lot of waiting and a lot of window switching. You st
 ### For your AI agents
 - **Approve from the menu bar.** When Claude Code asks "may I run this?", a bubble shows the exact command with **Allow / Deny**, plus **Always** when Claude offers a "don't ask again" rule. No more switching windows to press Enter.
 - **Reply from the menu bar, in any terminal.** When a long turn ends, the bubble shows what Claude said. Type your next instruction right there (or hit **Continue**) and Claude picks it up. It works with Terminal, iTerm2, VS Code, Cursor and more, no tmux needed, because it uses Claude Code's own hooks.
-- **See who's working.** The menu bar shows 🤖 while an agent is mid-turn (🤖3 for three sessions) and 🔔🤖 when one is waiting for you.
+- **The orbit is the status.** Orbi's menu bar icon is a little orbit: solid while an agent works, filling up as your current task runs, **blue** when an agent is waiting for your answer, **orange** when the task runs over. Colour-blind safe: no red or green.
 - **Jump back in one click.** Every bubble and Agents row has a ↗ button that brings the agent's terminal or IDE to the front (Terminal, iTerm2, VS Code, Cursor, Ghostty, …).
 - **Daily summary.** "Today: 2h 10m across 3 projects · 14 turns · 12 approved · 3 replies", at the top of the Agents list and in `get_status`.
 - **See what your agent did.** The **Agents** list at the top of Orbi's panel keeps every finished turn (with Claude's last message), every permission request (with your answer) and your replies. Click a row to read it in full, or ask your agent "what did you do today?" over MCP.
