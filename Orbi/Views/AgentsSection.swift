@@ -42,6 +42,8 @@ struct AgentsSection: View {
                     VStack(alignment: .leading, spacing: 6) { rows(store.events) }
                 }
                 .frame(maxHeight: 320)
+                // Without this the scroll view's height collapses in the menu bar window.
+                .fixedSize(horizontal: false, vertical: true)
             } else {
                 rows(Array(store.events.prefix(Self.collapsedCount)))
             }

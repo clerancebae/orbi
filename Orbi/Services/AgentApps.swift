@@ -5,12 +5,14 @@ import AppKit
 /// the exact window or tab would need Automation access to every terminal.
 @MainActor
 enum AgentApps {
+    /// Goes through NSWorkspace: since macOS 14, `NSRunningApplication.activate()` from an app
+    /// that isn't active itself (Orbi never is: its bubbles are non-activating panels) is
+    /// silently ignored. Opening the app via Launch Services brings a running copy to the front.
     static func activate(_ bundleID: String) {
-        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
-            app.activate()
-        } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
-            NSWorkspace.shared.openApplication(at: url, configuration: .init())
-        }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration)
     }
 
     /// "Terminal", "Visual Studio Code", … for tooltips; nil if the app isn't installed.

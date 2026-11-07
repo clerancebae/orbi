@@ -48,6 +48,7 @@ struct ReadingSection: View {
                         }
                     }
                     .frame(maxHeight: 160)
+                    .fixedSize(horizontal: false, vertical: true)  // else it collapses in the menu bar window
                     HStack {
                         Spacer()
                         Button("Clear all", role: .destructive) { store.clearFinishedEarlier() }
