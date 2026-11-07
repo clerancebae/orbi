@@ -83,7 +83,11 @@ final class BubblePresenter {
         let itemMidX = anchor?.midX ?? (screen.visibleFrame.maxX - 40)
         let x = min(max(itemMidX - Self.width / 2, screen.frame.minX + Self.edgeMargin),
                     screen.frame.maxX - Self.width - Self.edgeMargin)
-        var top = (anchor?.minY ?? screen.visibleFrame.maxY) - Self.gapBelowMenuBar
+        // Always where the menu bar normally ends. With an auto-hiding menu bar (or an app in
+        // full screen) the status item's window sits above the screen, which pushed bubbles
+        // partly off the top; now they stay put and the bar slides down just above them.
+        let barBottom = screen.frame.maxY - Self.menuBarHeight(on: screen)
+        var top = min(anchor?.minY ?? barBottom, barBottom) - Self.gapBelowMenuBar
 
         for (index, entry) in entries.enumerated() {
             let arrowX: CGFloat? = index == 0 ? itemMidX - x : nil
@@ -123,6 +127,12 @@ final class BubblePresenter {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         return panel
+    }
+
+    /// Height of the menu bar on `screen`, also while it's hidden: the bar's thickness, the
+    /// notch area (taller bar on notched Macs), or the space it takes when shown.
+    private static func menuBarHeight(on screen: NSScreen) -> CGFloat {
+        max(NSStatusBar.system.thickness, screen.safeAreaInsets.top, screen.frame.maxY - screen.visibleFrame.maxY)
     }
 
     /// Screen frame of our MenuBarExtra item. SwiftUI doesn't expose the NSStatusItem, but
