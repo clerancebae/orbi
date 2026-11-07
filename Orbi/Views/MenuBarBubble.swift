@@ -23,7 +23,9 @@ final class BubblePresenter {
     func isShowing(_ key: String) -> Bool { entries.contains { $0.key == key } }
 
     /// - Parameter content: the bubble body; receives a `close` action.
-    func show<Content: View>(key: String, sound: String? = "Tink",
+    /// - Parameter interactive: the bubble can take keyboard focus (text fields) once clicked.
+    ///   It never grabs focus by itself, so typing elsewhere is never hijacked.
+    func show<Content: View>(key: String, sound: String? = "Tink", interactive: Bool = false,
                              @ViewBuilder content: @escaping (_ close: @escaping () -> Void) -> Content) {
         close(key, animated: false)
 
@@ -32,7 +34,7 @@ final class BubblePresenter {
             AnyView(BubbleChrome(arrowX: arrowX) { content(closeAction) })
         }
         let host = NSHostingView(rootView: makeView(nil))
-        let panel = Self.makePanel()
+        let panel = Self.makePanel(interactive: interactive)
         panel.contentView = host
         entries.append(Entry(key: key, panel: panel, host: host, makeView: makeView))
 
@@ -86,8 +88,9 @@ final class BubblePresenter {
         }
     }
 
-    private static func makePanel() -> NSPanel {
-        let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+    private static func makePanel(interactive: Bool) -> NSPanel {
+        let panelClass: NSPanel.Type = interactive ? KeyablePanel.self : NSPanel.self
+        let panel = panelClass.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
         panel.isFloatingPanel = true
         panel.level = .statusBar
@@ -108,6 +111,11 @@ final class BubblePresenter {
             .first { $0.className.contains("NSStatusBarWindow") && $0.isVisible }
             .map(\.frame)
     }
+}
+
+/// Borderless panels can't become key by default; this one can (on click), for text input.
+private final class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
 }
 
 /// Material background + border, with the arrow when this bubble is the top one.

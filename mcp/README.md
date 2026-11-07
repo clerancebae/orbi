@@ -25,15 +25,30 @@ Actions open URLs with `open -g` (nothing comes to the front), then wait up to 2
   ```
 - **Claude Desktop**: `mcpServers.orbi` in `~/Library/Application Support/Claude/claude_desktop_config.json`. Restart Claude Desktop to load it.
 
-## "<Agent> finished" bubble (`agent_hook.py`)
-One hook script for every agent CLI. It remembers when a turn starts and, if the turn took ≥ 60 s (`ORBI_AGENT_MIN_SECONDS`), shows an Orbi bubble like "Gemini finished ✓ · Orbi · 4 min".
+## Agent bubbles (`agent_hook.py`)
+One hook script for every agent CLI: `/usr/bin/python3 -I /path/to/Orbi/mcp/agent_hook.py <agent> <event>`.
 
-`/usr/bin/python3 -I /path/to/Orbi/mcp/agent_hook.py <agent> prompt|stop`
-
-| Agent | Turn start → `prompt` | Turn end → `stop` | Config |
+| Event | What you see | Claude Code | Gemini CLI |
 |---|---|---|---|
-| Claude Code | `UserPromptSubmit` | `Stop` | `hooks` in `~/.claude/settings.json` |
-| Gemini CLI | `BeforeAgent` | `AfterAgent` | `hooks` in `~/.gemini/settings.json` (timeout is in ms) |
-| Codex CLI | `UserPromptSubmit` | `Stop` | Codex hooks (`~/.codex/hooks.json`, same shape as Claude's), agent name `codex` |
+| `prompt` | (remembers the start, closes open bubbles) | `UserPromptSubmit` | `BeforeAgent` |
+| `stop` | "finished ✓" after turns ≥ 60 s (`ORBI_AGENT_MIN_SECONDS`) | `Stop` | `AfterAgent` |
+| `stop --reply` | the same, plus Claude's last message and a reply field | `Stop` with `"asyncRewake": true` | – |
+| `permission` | the command with Allow / Deny / Terminal | `PermissionRequest` | – |
+| `wait` | sticky "needs you" until the agent continues | `Notification` (`elicitation_dialog\|agent_needs_input`) | `Notification` |
+| `resume` | closes bubbles answered in the terminal | `PostToolUse` (behind a shell guard) | `AfterTool` |
 
-Any other agent whose hooks pass JSON with `session_id`/`cwd` on stdin works the same way; the name is just shown in the bubble. Antigravity is an IDE without a documented command hook, so it isn't wired.
+How it works: the hook opens `orbi://ask?id=…`, Orbi shows the bubble and writes the answer to `~/Library/Application Support/Orbi/answers/<id>.json`, and the waiting hook returns it. A permission answer becomes the hook's `allow`/`deny` decision; ✕, **Terminal** or a 10-minute timeout fall back to the normal terminal prompt. A reply makes the async `Stop` hook exit 2 with the text, which wakes Claude.
+
+Claude Code (`~/.claude/settings.json`), with `H` = `/usr/bin/python3 -I /path/to/Orbi/mcp/agent_hook.py claude`:
+```json
+"hooks": {
+  "UserPromptSubmit":  [{ "hooks": [{ "type": "command", "command": "H prompt", "timeout": 10 }] }],
+  "Stop":              [{ "hooks": [{ "type": "command", "command": "H stop --reply", "asyncRewake": true, "timeout": 3600 }] }],
+  "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "H permission", "timeout": 600 }] }],
+  "Notification":      [{ "matcher": "elicitation_dialog|agent_needs_input", "hooks": [{ "type": "command", "command": "H wait", "timeout": 10 }] }],
+  "PostToolUse":       [{ "hooks": [{ "type": "command", "command": "set -- \"${TMPDIR:-/tmp}\"/orbi-agent-hook/claude-*.pending.*; [ -e \"$1\" ] && exec H resume; echo \"{}\"", "timeout": 10 }] }]
+}
+```
+The `PostToolUse` guard is plain shell, so Python only starts while a bubble is open.
+
+Gemini CLI uses `prompt`, `stop`, `wait` and `resume` (`BeforeAgent`, `AfterAgent`, `Notification`, `AfterTool`; timeouts in ms). Codex: same as Claude's `UserPromptSubmit`/`Stop` in `~/.codex/hooks.json`, agent name `codex`. Tests: `/usr/bin/python3 -I mcp/test_agent_hook.py`.

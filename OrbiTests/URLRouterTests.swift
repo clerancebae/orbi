@@ -96,8 +96,25 @@ struct NotifyRouteTests {
 
     @Test func notifyRoutes() {
         #expect(parse("orbi://notify?title=Claude%20finished%20%E2%9C%93&message=Orbi%20%C2%B7%203m")
-                == .success(.notify(title: "Claude finished ✓", message: "Orbi · 3m")))
-        #expect(parse("orbi://notify?message=Hi") == .success(.notify(title: "Orbi", message: "Hi")))
+                == .success(.notify(title: "Claude finished ✓", message: "Orbi · 3m", sticky: false)))
+        #expect(parse("orbi://notify?message=Hi") == .success(.notify(title: "Orbi", message: "Hi", sticky: false)))
+        #expect(parse("orbi://notify?title=Claude%20needs%20you&sticky=1")
+                == .success(.notify(title: "Claude needs you", message: nil, sticky: true)))
+        #expect(parse("orbi://notify?title=x&sticky=0") == .success(.notify(title: "x", message: nil, sticky: false)))
+        #expect(parse("orbi://notify/dismiss") == .success(.notifyDismiss))
         #expect(parse("orbi://notify") == .failure(.missingParameter("title")))
+    }
+
+    @Test func askRoutes() {
+        #expect(parse("orbi://ask?id=ab-12&kind=permission&title=Claude%20wants%20to%20use%20Bash&message=Orbi&detail=ls%20-la")
+                == .success(.ask(AgentAsk(id: "ab-12", kind: .permission, title: "Claude wants to use Bash",
+                                          message: "Orbi", detail: "ls -la"))))
+        #expect(parse("orbi://ask?id=x1&kind=reply&title=Done")
+                == .success(.ask(AgentAsk(id: "x1", kind: .reply, title: "Done", message: nil, detail: nil))))
+        #expect(parse("orbi://ask?id=..%2Fetc&kind=reply&title=t") == .failure(.invalidParameter("id")))
+        #expect(parse("orbi://ask?id=a&kind=other&title=t") == .failure(.invalidParameter("kind")))
+        #expect(parse("orbi://ask?id=a&kind=reply") == .failure(.missingParameter("title")))
+        #expect(parse("orbi://ask/cancel?id=ab-12") == .success(.askCancel(id: "ab-12")))
+        #expect(parse("orbi://ask/cancel") == .failure(.invalidParameter("id")))
     }
 }

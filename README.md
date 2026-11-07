@@ -27,6 +27,8 @@ Working with agents means a lot of waiting. You start a run, switch to something
 ## Features
 
 ### For your AI agents
+- **Approve from the menu bar.** When Claude Code asks "may I run this?", a bubble shows the exact command with **Allow / Deny / Terminal**. No more switching windows to press Enter.
+- **Read and reply without the terminal.** When a long turn ends, the bubble shows what Claude said. Type your next instruction right there (or hit **Continue**) and Claude picks it up.
 - **"Agent finished" bubble.** A small bubble under the menu bar icon when Claude Code, Gemini CLI or Codex finishes a turn longer than a minute: *"Claude finished ✓ · my-project · 7 min"*. Short replies stay quiet.
 - **MCP server.** Claude (Desktop and Code), Gemini CLI, Cursor, VS Code and any other MCP client can read your day and act on it: "plan my day: API docs 45m, review PR 20m", "start the next task", "save this link for later".
 - **Ping on request.** In chats without hooks (Claude Desktop), say "notify me on Orbi when you're done" and the agent calls the `notify` tool.

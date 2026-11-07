@@ -39,6 +39,11 @@ enum SharedContainer {
         realHomeDirectory.appending(path: "Library/Application Support/Orbi/status.json")
     }
 
+    /// Answers to agent questions (`<id>.json`), read by `mcp/agent_hook.py`. Same allowed folder.
+    static var answersDirectory: URL {
+        realHomeDirectory.appending(path: "Library/Application Support/Orbi/answers", directoryHint: .isDirectory)
+    }
+
     /// The user's real home folder. Inside the sandbox `NSHomeDirectory()` points into the
     /// app container, so read it from the password database instead.
     static let realHomeDirectory: URL = {

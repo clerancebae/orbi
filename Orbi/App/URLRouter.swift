@@ -29,8 +29,26 @@ enum OrbiAction: Equatable, Sendable {
     case readingSave(url: URL, title: String?)
     case readingOpenNext
     case capture
-    /// Short info bubble (e.g. "Claude finished"), closes by itself.
-    case notify(title: String, message: String?)
+    /// Info bubble (e.g. "Claude finished"). Closes by itself unless `sticky`
+    /// (e.g. "Claude needs you"), which stays until closed or dismissed.
+    case notify(title: String, message: String?, sticky: Bool)
+    /// Closes a sticky notify bubble (the agent continued). No-op otherwise.
+    case notifyDismiss
+    /// An AI agent asks the user something (permission, or "reply?" after a turn). The answer
+    /// is written to `answers/<id>.json` for the waiting hook to pick up.
+    case ask(AgentAsk)
+    /// The question was answered elsewhere (e.g. in the terminal): close it without answering.
+    case askCancel(id: String)
+}
+
+struct AgentAsk: Equatable {
+    enum Kind: String { case permission, reply }
+    let id: String
+    let kind: Kind
+    let title: String
+    let message: String?
+    /// The command / file for a permission, or the agent's last message for a reply.
+    let detail: String?
 }
 
 /// Parses `orbi://` URLs into actions. Pure — no side effects — so it's fully unit tested.
@@ -64,6 +82,11 @@ enum URLRouter {
         case "task/add": return parseTaskAdd(query)
         case "reading/save": return parseReadingSave(query)
         case "notify": return parseNotify(query)
+        case "notify/dismiss": return .success(.notifyDismiss)
+        case "ask": return parseAsk(query)
+        case "ask/cancel":
+            guard let id = query["id"], isValidAskID(id) else { return .failure(.invalidParameter("id")) }
+            return .success(.askCancel(id: id))
         default: return .failure(.unknownRoute(route))
         }
     }
@@ -114,8 +137,30 @@ enum URLRouter {
         let title = query["title"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let message = query["message"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         guard title != nil || message != nil else { return .failure(.missingParameter("title")) }
+        let sticky = ["1", "true", "yes"].contains(query["sticky"]?.lowercased() ?? "")
         return .success(.notify(title: String((title ?? "Orbi").prefix(maxNotifyLength)),
-                                message: message.map { String($0.prefix(maxNotifyLength * 2)) }))
+                                message: message.map { String($0.prefix(maxNotifyLength * 2)) },
+                                sticky: sticky))
+    }
+
+    static let maxAskDetailLength = 4000
+
+    /// Ids name answer files, so only short, plain ids are accepted (no paths).
+    static func isValidAskID(_ id: String) -> Bool {
+        (1...64).contains(id.count) && id.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
+    }
+
+    private static func parseAsk(_ query: [String: String]) -> Result<OrbiAction, RouteError> {
+        guard let id = query["id"], isValidAskID(id) else { return .failure(.invalidParameter("id")) }
+        guard let kind = AgentAsk.Kind(rawValue: query["kind"] ?? "") else { return .failure(.invalidParameter("kind")) }
+        guard let title = query["title"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty else {
+            return .failure(.missingParameter("title"))
+        }
+        let message = query["message"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let detail = query["detail"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        return .success(.ask(AgentAsk(id: id, kind: kind, title: String(title.prefix(maxNotifyLength)),
+                                      message: message.map { String($0.prefix(maxNotifyLength * 2)) },
+                                      detail: detail.map { String($0.prefix(maxAskDetailLength)) })))
     }
 
     /// "today", "tomorrow" or "YYYY-MM-DD".

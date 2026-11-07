@@ -23,6 +23,7 @@ final class AppEnvironment {
     let readingNudgeBubble: ReadingNudgeBubble
     let readingNudge: ReadingNudgeScheduler
     let notifyBubble: NotifyBubble
+    let askBubble: AskBubble
     /// nil in demo mode, so a throwaway in-memory session never overwrites the real status.json.
     let statusExporter: StatusExporter?
     private var systemObservers: [NSObjectProtocol] = []
@@ -73,6 +74,7 @@ final class AppEnvironment {
         readingStore = ReadingStore(context: modelContainer.mainContext)
         readingNudgeBubble = ReadingNudgeBubble(presenter: bubbles, store: readingStore)
         notifyBubble = NotifyBubble(presenter: bubbles)
+        askBubble = AskBubble(presenter: bubbles)
         let readingStore = self.readingStore, readingNudgeBubble = self.readingNudgeBubble
         readingNudge = ReadingNudgeScheduler(
             config: { settings.readingNudgeConfig },
@@ -189,8 +191,14 @@ final class AppEnvironment {
             readingStore.save(url: url, title: title)
         case .readingOpenNext:
             readingStore.openNext()
-        case let .notify(title, message):
-            notifyBubble.show(title: title, message: message)
+        case let .notify(title, message, sticky):
+            notifyBubble.show(title: title, message: message, sticky: sticky)
+        case .notifyDismiss:
+            notifyBubble.dismissSticky()
+        case let .ask(ask):
+            askBubble.show(ask)
+        case let .askCancel(id):
+            askBubble.cancel(id: id)
         case .capture:
             Self.urlLog.info("orbi://capture arrives with the quick-capture panel (Phase 4)")
         }
