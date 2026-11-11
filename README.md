@@ -110,3 +110,4 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for build, test and debugging not
 ## License
 
 [MIT](LICENSE)
+[![M8ven Score](https://m8ven.ai/badge/mcp/clerancebae/orbi)](https://m8ven.ai/mcp/clerancebae/orbi?s=readme)
