@@ -19,6 +19,7 @@
   <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-orange">
   <img alt="MCP" src="https://img.shields.io/badge/MCP-ready-8A2BE2">
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
+  <a href="https://m8ven.ai/mcp/clerancebae/orbi?s=readme"><img alt="M8ven Score" src="https://m8ven.ai/badge/mcp/clerancebae/orbi"></a>
 </p>
 
 <table>
