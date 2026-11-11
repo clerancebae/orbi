@@ -19,7 +19,7 @@
   <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-orange">
   <img alt="MCP" src="https://img.shields.io/badge/MCP-ready-8A2BE2">
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
-  <a href="https://m8ven.ai/mcp/clerancebae/orbi?s=readme"><img alt="M8ven Score" src="https://m8ven.ai/badge/mcp/clerancebae/orbi"></a>
+  [![M8ven Score](https://m8ven.ai/badge/mcp/clerancebae-orbi-1ybv1e?v=045bc6b5ec4524a89d2c0b7ac504a11f)](https://m8ven.ai/mcp/clerancebae-orbi-1ybv1e?s=readme)
 </p>
 
 <table>
@@ -110,4 +110,3 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for build, test and debugging not
 ## License
 
 [MIT](LICENSE)
-[![M8ven Score](https://m8ven.ai/badge/mcp/clerancebae/orbi)](https://m8ven.ai/mcp/clerancebae/orbi?s=readme)
